@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node / JS
+node_modules/
+dist/
+build/
+
+# Secrets / config locale (ne jamais versionner)
+.env
+*.local
+
+# Éditeurs
+.vscode/
+.idea/
+
+# Données / sorties générées par l'outil (à adapter selon le projet :
+# décommente ou ajoute les dossiers qui contiennent des fichiers clients,
+# exports, fichiers temporaires de travail plutôt que du code)
+# sources/
+# output/
+# *.zip

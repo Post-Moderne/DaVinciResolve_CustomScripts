@@ -1,0 +1,7 @@
+Copyright (c) 2026 Post-Moderne
+
+Tous droits réservés.
+
+Ce code est la propriété de Post-Moderne et est destiné à un usage
+interne uniquement. Toute copie, distribution ou utilisation en dehors de
+la compagnie n'est pas autorisée sans permission écrite.
