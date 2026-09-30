@@ -86,6 +86,9 @@ class Launcher(tk.Tk):
         tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x")
         footer = tk.Frame(self, bg=Theme.DARK_BG, pady=10)
         footer.pack(fill="x")
+        tk.Button(footer, text="Mises à jour…", font=Theme.FONT_SM, bg=Theme.PANEL_BG, fg=Theme.FG,
+                  relief="flat", bd=0, padx=14, pady=6, cursor="hand2",
+                  command=self._open_updater).pack(side="left", padx=20)
         tk.Button(footer, text="Quitter", font=Theme.FONT_SM, bg=Theme.FG_DIM, fg=Theme.DARK_BG,
                   relief="flat", bd=0, padx=14, pady=6, cursor="hand2",
                   command=self.destroy).pack(side="right", padx=20)
@@ -107,6 +110,9 @@ class Launcher(tk.Tk):
 
         for widget in (row, inner, *inner.winfo_children()):
             widget.bind("<Button-1>", _open)
+
+    def _open_updater(self):
+        self._launch_tool("pm_update")
 
     def _launch_tool(self, module_name):
         try:

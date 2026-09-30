@@ -50,6 +50,19 @@ def resolve_variant():
 RESOLVE_VARIANT = resolve_variant()
 
 
+def install_paths(variant=None):
+    """
+    Retourne {"utility": ..., "modules": ...} : où vit PM-Suite.py (menu Utility)
+    et où vivent pm_common.py / VERSION / pm_tools/ pour la variante donnée
+    (par défaut la variante détectée).
+    """
+    variant = variant or RESOLVE_VARIANT
+    if variant not in PATHS:
+        raise RuntimeError("Variante de DaVinci Resolve non détectée (dossier Fusion/Scripts introuvable).")
+    p = PATHS[variant]
+    return {"utility": p["scripts"] + "/Utility", "modules": p["modules"]}
+
+
 def get_version():
     """
     Lit la version installée depuis le fichier VERSION à côté de ce module —
