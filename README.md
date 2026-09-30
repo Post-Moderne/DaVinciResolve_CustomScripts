@@ -4,12 +4,14 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 
 ## À quoi ça sert
 
-**PM Suite** est le point d'entrée unique : une fenêtre lanceur qui donne accès aux 4 outils ci-dessous, chacun agissant directement sur le projet Resolve ouvert via l'API de scripting (`bmd.scriptapp("Resolve")`).
+**PM Suite** est le point d'entrée unique : une fenêtre lanceur qui donne accès aux 6 outils ci-dessous, chacun agissant directement sur le projet Resolve ouvert via l'API de scripting (`bmd.scriptapp("Resolve")`).
 
 | Outil | Fonction |
 |---|---|
 | Metadata Find & Replace | Recherche/remplacement dans les métadonnées des clips du Media Pool. |
 | CSV → Start TC | Met à jour le Start TC des clips à partir d'un `.csv` (colonnes `Name`/`Start`), avec relecture de confirmation après écriture. |
+| CSV → VFX ID | Renomme les clips de la timeline avec les VFX ID d'un `.csv` (colonnes VFX ID + TC record) : le TC record est comparé au point d'entrée des clips (piste au choix), avec aperçu avant application et journal des anciens noms. |
+| Markers → Stills | Exporte un still (PNG, JPG, TIFF ou DPX) à chaque marker de la timeline active, nommé d'après le nom du marker (repli : notes, puis TC). Filtre par couleur de marker ou toutes les couleurs, aperçu des noms de fichiers avant export, doublons suffixés (`_2`, `_3`…) sans jamais écraser, journal d'export. |
 | Timecode Extractor | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
 | BinBuilder | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
 
@@ -49,7 +51,7 @@ Redémarrer Resolve (ou rafraîchir le menu Scripts). L'app apparaît ensuite so
 
 Dans la PM-Suite, bouton **Mises à jour…** : affiche la version installée, vérifie celle de GitHub et installe la nouvelle si elle est plus récente (sauvegarde + restauration automatique en cas d'échec ; relancer ensuite la PM-Suite). Sur une installation DMG dont le dossier Modules est protégé, relancer plutôt l'installeur.
 
-**Publier une version** : incrémenter `scripts/VERSION`, committer, pousser sur `main`. Sans incrément, les postes ne voient aucune mise à jour.
+**Publier une version** : incrémenter `scripts/VERSION`, committer, pousser sur `main`, puis poser et pousser le tag correspondant (`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`). Sans incrément, les postes ne voient aucune mise à jour.
 
 ## Structure du projet
 
@@ -65,6 +67,7 @@ scripts/
     csv_to_tc.py           # CSV → Start TC
     dji_tc.py               # Timecode Extractor
     csv_to_vfxid.py        # CSV → VFX ID
+    markers_to_stills.py   # Markers → Stills
     bin_builder.py         # BinBuilder
 Install-PM-Suite.command  # installeur à double-clic
 ```
@@ -73,11 +76,13 @@ Install-PM-Suite.command  # installeur à double-clic
 
 - [x] Installeur à double-clic (`Install-PM-Suite.command`)
 - [x] Mise à jour depuis la PM-Suite (bouton « Mises à jour… »)
-- [ ] Tag/release de version sur GitHub
+- [x] Tags de version sur GitHub (`vX.Y.Z` à chaque release)
+- [ ] Validation de l'installeur sur un poste Resolve DMG
 
 ## Limitations connues
 
-- **Déploiement manuel pour l'instant** : les fichiers doivent être copiés à la main dans les deux dossiers ci-dessus, selon la variante de Resolve (App Store vs DMG) — l'installeur automatisera ça (voir Roadmap).
+- **Installation DMG non validée** : l'installeur et l'updater ont été testés sur Resolve App Store ; sur DMG (dossiers système, droits admin), l'installeur est à valider.
+- **Markers → Stills** : le still reflète le grade actuel de la timeline ; l'export vers un volume réseau depuis Resolve App Store (sandbox) n'a pas encore été vérifié.
 - Dépendance à `tkinter` fourni par l'installation Python embarquée de Resolve — à vérifier après une mise à jour majeure de Resolve, certaines versions ayant eu des soucis connus avec `tkinter` sur macOS.
 - Les fichiers doivent être copiés localement sur chaque poste (pas de lien symbolique vers un volume réseau) pour que la suite fonctionne aussi hors réseau du studio.
 
