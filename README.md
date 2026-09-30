@@ -1,17 +1,17 @@
 # DaVinciResolve_CustomScripts
 
-Collection de scripts utilitaires internes pour DaVinci Resolve, installables dans le menu Workspace > Scripts.
+PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans une seule app accessible depuis le menu Workspace > Scripts.
 
 ## À quoi ça sert
 
-Chaque script s'exécute depuis DaVinci Resolve (Workspace > Scripts > Utility) et utilise l'API de scripting Resolve (`bmd.scriptapp("Resolve")`) pour agir directement sur le projet ouvert.
+**PM Suite** est le point d'entrée unique : une fenêtre lanceur qui donne accès aux 4 outils ci-dessous, chacun agissant directement sur le projet Resolve ouvert via l'API de scripting (`bmd.scriptapp("Resolve")`).
 
-| Script | Fonction |
+| Outil | Fonction |
 |---|---|
-| `scripts/PM-FindAndReplace_1.1.py` | Recherche/remplacement dans les métadonnées des clips du Media Pool. |
-| `scripts/PM-CSV-2-StartTC.py` | Met à jour le Start TC des clips à partir d'un `.csv` (colonnes `Name`/`Start`), avec relecture de confirmation après écriture. |
-| `scripts/PM-DJI-TC.py` | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
-| `scripts/bin_builder.py` | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
+| Metadata Find & Replace | Recherche/remplacement dans les métadonnées des clips du Media Pool. |
+| CSV → Start TC | Met à jour le Start TC des clips à partir d'un `.csv` (colonnes `Name`/`Start`), avec relecture de confirmation après écriture. |
+| Timecode Extractor | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
+| BinBuilder | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
 
 ## Prérequis
 
@@ -20,34 +20,52 @@ Chaque script s'exécute depuis DaVinci Resolve (Workspace > Scripts > Utility) 
 
 ## Installation
 
-Copier le(s) script(s) voulu(s) dans le dossier `Scripts/Utility` correspondant à la variante de Resolve installée :
+Deux emplacements différents selon le type de fichier, pour qu'une seule entrée ("PM-Suite") apparaisse dans le menu Scripts (Resolve liste tout `.py` présent directement dans `Scripts/Utility`) :
+
+- **`scripts/PM-Suite.py`** → dossier `Scripts/Utility`
+- **`scripts/pm_common.py`, `scripts/VERSION` et `scripts/pm_tools/`** → dossier `Developer/Scripting/Modules` (à côté du module `DaVinciResolveScript` fourni par Resolve)
 
 **App Store (sandbox) :**
 ```
-~/Library/Containers/com.blackmagic-design.DaVinciResolveAppStore/Data/Library/Application Support/Fusion/Scripts/Utility/
+Scripts/Utility  → ~/Library/Containers/com.blackmagic-design.DaVinciResolveAppStore/Data/Library/Application Support/Fusion/Scripts/Utility/
+Modules          → ~/Library/Containers/com.blackmagic-design.DaVinciResolveAppStore/Data/Library/Application Support/Developer/Scripting/Modules/
 ```
 
 **DMG (standard) :**
 ```
-/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/
+Scripts/Utility  → /Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/
+Modules          → /Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Modules/
 ```
 
-Redémarrer Resolve (ou rafraîchir le menu Scripts). Les outils apparaissent ensuite sous **Workspace > Scripts > Utility**.
+Redémarrer Resolve (ou rafraîchir le menu Scripts). L'app apparaît ensuite sous **Workspace > Scripts > Utility > PM-Suite**.
+
+*(Un installeur à double-clic automatisant ce découpage est prévu — voir Roadmap.)*
 
 ## Structure du projet
 
 ```
 scripts/
-  PM-FindAndReplace_1.1.py
-  PM-CSV-2-StartTC.py
-  PM-DJI-TC.py
-  bin_builder.py
+  PM-Suite.py           # point d'entrée — seul fichier à mettre dans Scripts/Utility
+  pm_common.py           # connexion Resolve, thème UI, logging, boucle d'événements
+  VERSION                 # source de vérité pour la version installée
+  pm_tools/
+    __init__.py
+    find_replace.py       # Metadata Find & Replace
+    csv_to_tc.py           # CSV → Start TC
+    dji_tc.py               # Timecode Extractor
+    bin_builder.py         # BinBuilder
 ```
+
+## Roadmap
+
+- [ ] Installeur à double-clic (copie automatique vers les bons dossiers selon la variante détectée, log d'erreur)
+- [ ] App de mise à jour (affiche la version installée, vérifie/récupère la dernière version publiée sur ce repo)
 
 ## Limitations connues
 
-- **Déploiement manuel** : chaque script doit être copié à la main sur la machine de chaque monteur, dans le bon dossier selon sa variante de Resolve (App Store vs DMG) — pas de mécanisme de mise à jour centralisé pour l'instant. Une solution avait été explorée via des liens symboliques vers un dossier réseau partagé (comme c'est déjà le cas pour les Fuses/Templates Fusion de la compagnie), mais elle a été mise de côté pour l'instant.
+- **Déploiement manuel pour l'instant** : les fichiers doivent être copiés à la main dans les deux dossiers ci-dessus, selon la variante de Resolve (App Store vs DMG) — l'installeur automatisera ça (voir Roadmap).
 - Dépendance à `tkinter` fourni par l'installation Python embarquée de Resolve — à vérifier après une mise à jour majeure de Resolve, certaines versions ayant eu des soucis connus avec `tkinter` sur macOS.
+- Les fichiers doivent être copiés localement sur chaque poste (pas de lien symbolique vers un volume réseau) pour que la suite fonctionne aussi hors réseau du studio.
 
 ## Contact
 

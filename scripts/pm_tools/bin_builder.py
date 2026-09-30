@@ -1,77 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BinBuilder – Post-Moderne
-==========================
-
-Outil pour DaVinci Resolve permettant de créer plusieurs bins/sous-bins
-d'un coup dans le Media Pool, selon deux modes :
-
-  1. Mode Miroir  : reproduit récursivement l'arborescence d'un dossier
-                     Finder réel en bins/sous-bins Resolve.
-  2. Mode Manuel   : crée une arborescence de bins à partir d'une liste
-                     de noms indentée par tabulations, saisie à la main.
-
-Installation :
-  Placer ce fichier dans le dossier Utility des scripts Resolve, par exemple :
-    ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/
-
-  Le script devient alors accessible depuis Resolve via :
-    Workspace > Scripts > BinBuilder
-
-Auteur : Post-Moderne / Anthony
+BinBuilder — crée plusieurs bins/sous-bins d'un coup dans le Media Pool,
+en miroir d'une arborescence Finder ou depuis une liste indentée saisie
+à la main. Module interne de la PM Suite (voir PM-Suite.py).
 """
 
 import os
 import sys
 import fnmatch
-from datetime import datetime
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pm_common
+from pm_common import PMWindow, Theme
 
-# ---------------------------------------------------------------------------
-# Connexion à l'API Resolve
-# ---------------------------------------------------------------------------
-# Quand ce script est lancé depuis Workspace > Scripts, Resolve injecte
-# normalement une variable globale `resolve` déjà connectée. On garde un
-# fallback manuel au cas où le script serait testé autrement (par ex. relancé
-# depuis la console Resolve sans passer par le menu Scripts).
-try:
-    resolve  # noqa: F821 - injectée par Resolve à l'exécution
-except NameError:
-    import DaVinciResolveScript as dvr_script  # type: ignore
-    resolve = dvr_script.scriptapp("Resolve")
-
-if resolve is None:
-    raise RuntimeError(
-        "Impossible de se connecter à DaVinci Resolve. "
-        "Ce script doit être lancé depuis Resolve (Workspace > Scripts)."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Emplacement du log
-# ---------------------------------------------------------------------------
-# Note : dans la version App Store de Resolve, os.path.expanduser("~") peut
-# renvoyer un chemin sandboxé qui ne correspond pas au vrai dossier utilisateur.
-# On reconstruit donc le home réel à partir de la variable d'environnement USER.
-_home_reel = f"/Users/{os.environ.get('USER', 'unknown')}"
-LOG_DIR = os.path.join(_home_reel, "Logs", "BinBuilder")
-
-
-def ecrire_log(journal_lignes):
-    """Écrit le journal d'exécution dans un fichier horodaté. Retourne le chemin du log."""
-    os.makedirs(LOG_DIR, exist_ok=True)
-    horodatage = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    chemin_log = os.path.join(LOG_DIR, f"{horodatage}.log")
-    with open(chemin_log, "w", encoding="utf-8") as f:
-        f.write(f"BinBuilder – exécution du {datetime.now().isoformat()}\n")
-        f.write("=" * 60 + "\n")
-        for ligne in journal_lignes:
-            f.write(ligne + "\n")
-    return chemin_log
+TOOL_NAME = "PM-BinBuilder"
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +45,6 @@ def parser_liste_indentee(texte):
     Transforme un texte indenté par tabulations en une liste de BinNode
     (les racines de l'arbre, éventuellement plusieurs bins de même niveau).
 
-    Exemple d'entrée :
-        VFX
-        \tPlates
-        \tComp
-        Sound
-        \tSFX
-        \tDialogue
-
     Lève ValueError si l'indentation est incohérente (ex: saut de plus
     d'un niveau d'un coup).
     """
@@ -116,7 +53,7 @@ def parser_liste_indentee(texte):
 
     for numero_ligne, ligne_brute in enumerate(texte.split("\n"), start=1):
         if not ligne_brute.strip():
-            continue  # on ignore les lignes vides
+            continue
 
         sans_tabs = ligne_brute.lstrip("\t")
         niveau = len(ligne_brute) - len(sans_tabs)
@@ -125,8 +62,6 @@ def parser_liste_indentee(texte):
         if not nom:
             continue
 
-        # Une ligne ne peut descendre que d'un niveau à la fois par rapport
-        # au dernier niveau connu dans la pile, sinon la hiérarchie est ambiguë.
         niveau_max_autorise = pile[-1][0] + 1
         if niveau > niveau_max_autorise:
             raise ValueError(
@@ -134,7 +69,6 @@ def parser_liste_indentee(texte):
                 f"(saut de niveau non autorisé)."
             )
 
-        # On remonte la pile jusqu'à trouver le bon parent
         while pile and pile[-1][0] >= niveau:
             pile.pop()
 
@@ -168,12 +102,8 @@ def construire_arbre_depuis_dossier(chemin, patterns_exclusion):
     node = BinNode(os.path.basename(chemin.rstrip("/")) or chemin)
 
     try:
-        sous_dossiers = sorted(
-            e.name for e in os.scandir(chemin) if e.is_dir()
-        )
+        sous_dossiers = sorted(e.name for e in os.scandir(chemin) if e.is_dir())
     except PermissionError:
-        # On ne bloque pas tout l'arbre pour un dossier illisible :
-        # on le signale simplement en le laissant sans enfants.
         return node
 
     for nom in sous_dossiers:
@@ -208,122 +138,88 @@ def creer_bins(media_pool, dossier_parent_resolve, arbre, journal):
 # ---------------------------------------------------------------------------
 # Interface graphique
 # ---------------------------------------------------------------------------
-class BinBuilderApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("BinBuilder – Post-Moderne")
-        self.root.geometry("620x620")
+class BinBuilderWindow(PMWindow):
+    def __init__(self, master):
+        try:
+            _, self.projet, self.media_pool = pm_common.get_resolve_objects()
+        except Exception as e:
+            messagebox.showerror("BinBuilder", str(e))
+            self.projet = self.media_pool = None
 
-        self.projet = resolve.GetProjectManager().GetCurrentProject()
-        if self.projet is None:
-            messagebox.showerror(
-                "BinBuilder",
-                "Aucun projet Resolve n'est actuellement ouvert.\n"
-                "Ouvre un projet avant de lancer BinBuilder."
-            )
-            self.root.destroy()
+        self.arbre_en_attente = None  # liste de BinNode, alimentée par "Prévisualiser"
+        super().__init__(master, "BinBuilder", f"DaVinci Resolve  ·  {pm_common.RESOLVE_VARIANT}")
+
+    def _build_content(self, main):
+        if self.media_pool is None:
+            tk.Label(main, text="Aucun projet Resolve ouvert.", bg=Theme.DARK_BG, fg=Theme.DANGER).pack(pady=20)
             return
 
-        self.media_pool = self.projet.GetMediaPool()
-        self.arbre_en_attente = None  # liste de BinNode, alimentée par "Prévisualiser"
-
-        self._construire_interface()
-
-    # -- Construction de l'UI ------------------------------------------------
-    def _construire_interface(self):
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=False, padx=10, pady=10)
-
+        notebook = ttk.Notebook(main)
+        notebook.pack(fill="both", expand=False, pady=(0, 10))
         self._construire_onglet_miroir(notebook)
         self._construire_onglet_manuel(notebook)
 
-        # -- Destination --
-        cadre_destination = ttk.LabelFrame(self.root, text="Où créer les bins")
-        cadre_destination.pack(fill="x", padx=10, pady=(0, 10))
-
+        cadre_destination = ttk.LabelFrame(main, text="Où créer les bins")
+        cadre_destination.pack(fill="x", pady=(0, 10))
         self.destination_var = tk.StringVar(value="racine")
-        ttk.Radiobutton(
-            cadre_destination, text="Racine du Media Pool",
-            variable=self.destination_var, value="racine"
-        ).pack(anchor="w", padx=10, pady=2)
-        ttk.Radiobutton(
-            cadre_destination, text="Bin actuellement sélectionné dans Resolve",
-            variable=self.destination_var, value="selection"
-        ).pack(anchor="w", padx=10, pady=2)
+        ttk.Radiobutton(cadre_destination, text="Racine du Media Pool",
+                        variable=self.destination_var, value="racine").pack(anchor="w", padx=10, pady=2)
+        ttk.Radiobutton(cadre_destination, text="Bin actuellement sélectionné dans Resolve",
+                        variable=self.destination_var, value="selection").pack(anchor="w", padx=10, pady=2)
 
-        # -- Aperçu --
-        cadre_apercu = ttk.LabelFrame(self.root, text="Aperçu de l'arborescence à créer")
-        cadre_apercu.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        self.arbre_apercu = ttk.Treeview(cadre_apercu, show="tree")
+        cadre_apercu = ttk.LabelFrame(main, text="Aperçu de l'arborescence à créer")
+        cadre_apercu.pack(fill="both", expand=True, pady=(0, 10))
+        self.arbre_apercu = ttk.Treeview(cadre_apercu, show="tree", height=8)
         self.arbre_apercu.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # -- Actions --
-        cadre_actions = ttk.Frame(self.root)
-        cadre_actions.pack(fill="x", padx=10, pady=(0, 10))
+        cadre_actions = tk.Frame(main, bg=Theme.DARK_BG)
+        cadre_actions.pack(fill="x")
+        self.bouton_creer = self.button(cadre_actions, "CRÉER LES BINS", Theme.SUCCESS,
+                                         self._creer_bins_clic, side="right")
+        self.bouton_creer.config(state="disabled")
 
-        self.bouton_creer = ttk.Button(
-            cadre_actions, text="Créer les bins",
-            command=self._creer_bins_clic, state="disabled"
-        )
-        self.bouton_creer.pack(side="right")
-
-        self.label_statut = ttk.Label(self.root, text="", foreground="gray")
-        self.label_statut.pack(fill="x", padx=10, pady=(0, 10))
+        self.label_statut = tk.Label(main, text="", bg=Theme.DARK_BG, fg=Theme.FG_DIM,
+                                      font=Theme.FONT_SM, anchor="w")
+        self.label_statut.pack(fill="x", pady=(8, 0))
 
     def _construire_onglet_miroir(self, notebook):
         onglet = ttk.Frame(notebook)
         notebook.add(onglet, text="Mode Miroir (dossier Finder)")
 
         ttk.Label(onglet, text="Dossier source :").pack(anchor="w", padx=10, pady=(10, 0))
-
         cadre_chemin = ttk.Frame(onglet)
         cadre_chemin.pack(fill="x", padx=10, pady=5)
         self.chemin_var = tk.StringVar(value="(aucun dossier sélectionné)")
-        ttk.Label(cadre_chemin, textvariable=self.chemin_var, foreground="gray").pack(side="left", fill="x", expand=True)
+        ttk.Label(cadre_chemin, textvariable=self.chemin_var).pack(side="left", fill="x", expand=True)
         ttk.Button(cadre_chemin, text="Choisir…", command=self._choisir_dossier).pack(side="right")
 
         self.inclure_racine_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            onglet, text="Créer un bin pour le dossier sélectionné lui-même (pas seulement son contenu)",
-            variable=self.inclure_racine_var
-        ).pack(anchor="w", padx=10, pady=5)
+        ttk.Checkbutton(onglet, text="Créer un bin pour le dossier sélectionné lui-même (pas seulement son contenu)",
+                        variable=self.inclure_racine_var).pack(anchor="w", padx=10, pady=5)
 
         ttk.Label(onglet, text="Motifs à exclure (séparés par des virgules, syntaxe glob type *.tmp) :").pack(
-            anchor="w", padx=10, pady=(10, 0)
-        )
+            anchor="w", padx=10, pady=(10, 0))
         self.exclusions_var = tk.StringVar(value="_historique*, node_modules, .git")
         ttk.Entry(onglet, textvariable=self.exclusions_var).pack(fill="x", padx=10, pady=5)
-        ttk.Label(
-            onglet, text="(les dossiers commençant par un point sont toujours exclus automatiquement)",
-            foreground="gray"
-        ).pack(anchor="w", padx=10)
+        ttk.Label(onglet, text="(les dossiers commençant par un point sont toujours exclus automatiquement)").pack(
+            anchor="w", padx=10)
 
-        ttk.Button(
-            onglet, text="Prévisualiser", command=self._previsualiser_miroir
-        ).pack(anchor="e", padx=10, pady=15)
-
+        ttk.Button(onglet, text="Prévisualiser", command=self._previsualiser_miroir).pack(anchor="e", padx=10, pady=15)
         self.chemin_dossier_source = None
 
     def _construire_onglet_manuel(self, notebook):
         onglet = ttk.Frame(notebook)
         notebook.add(onglet, text="Mode Manuel (liste indentée)")
 
-        ttk.Label(
-            onglet,
-            text="Une entrée par ligne. Indentation par TABULATION pour créer un sous-bin."
-        ).pack(anchor="w", padx=10, pady=(10, 5))
+        ttk.Label(onglet, text="Une entrée par ligne. Indentation par TABULATION pour créer un sous-bin.").pack(
+            anchor="w", padx=10, pady=(10, 5))
 
-        self.zone_texte = tk.Text(onglet, height=14, wrap="none")
+        self.zone_texte = tk.Text(onglet, height=12, wrap="none", bg=Theme.PANEL_BG, fg=Theme.FG,
+                                   insertbackground=Theme.ACCENT, relief="flat")
         self.zone_texte.pack(fill="both", expand=True, padx=10, pady=5)
-        self.zone_texte.insert(
-            "1.0",
-            "VFX\n\tPlates\n\tComp\nSound\n\tSFX\n\tDialogue\n"
-        )
+        self.zone_texte.insert("1.0", "VFX\n\tPlates\n\tComp\nSound\n\tSFX\n\tDialogue\n")
 
-        ttk.Button(
-            onglet, text="Prévisualiser", command=self._previsualiser_manuel
-        ).pack(anchor="e", padx=10, pady=10)
+        ttk.Button(onglet, text="Prévisualiser", command=self._previsualiser_manuel).pack(anchor="e", padx=10, pady=10)
 
     # -- Actions ---------------------------------------------------------
     def _choisir_dossier(self):
@@ -410,45 +306,20 @@ class BinBuilderApp:
         journal = []
         creer_bins(self.media_pool, dossier_parent, self.arbre_en_attente, journal)
 
-        chemin_log = ecrire_log(journal)
+        chemin_log = pm_common.write_log(TOOL_NAME, journal)
 
         nb_erreurs = sum(1 for l in journal if l.startswith("ERREUR"))
         nb_ok = len(journal) - nb_erreurs
 
         if nb_erreurs:
-            messagebox.showwarning(
-                "BinBuilder",
-                f"{nb_ok} bin(s) créé(s), {nb_erreurs} erreur(s).\nDétail dans le log :\n{chemin_log}"
-            )
+            messagebox.showwarning("BinBuilder", f"{nb_ok} bin(s) créé(s), {nb_erreurs} erreur(s).\nDétail dans le log :\n{chemin_log}")
         else:
-            messagebox.showinfo(
-                "BinBuilder",
-                f"{nb_ok} bin(s) créé(s) avec succès.\nLog : {chemin_log}"
-            )
+            messagebox.showinfo("BinBuilder", f"{nb_ok} bin(s) créé(s) avec succès.\nLog : {chemin_log}")
 
         self.label_statut.config(text=f"Terminé. Log : {chemin_log}")
         self.bouton_creer.config(state="disabled")
         self.arbre_en_attente = None
 
 
-# ---------------------------------------------------------------------------
-# Point d'entrée
-# ---------------------------------------------------------------------------
-def main():
-    root = tk.Tk()
-    app = BinBuilderApp(root)
-
-    # On évite root.mainloop() : dans le contexte d'un script Resolve, la
-    # boucle bloquante standard peut geler l'interface de Resolve (même
-    # thread). On implémente donc une boucle d'update manuelle, qui se
-    # termine proprement quand la fenêtre est fermée.
-    try:
-        while True:
-            root.update_idletasks()
-            root.update()
-    except tk.TclError:
-        pass  # la fenêtre a été fermée, on sort proprement
-
-
-if __name__ == "__main__":
-    main()
+def open_window(master):
+    return BinBuilderWindow(master)
