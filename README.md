@@ -77,11 +77,10 @@ Install-PM-Suite.command  # installeur à double-clic
 - [x] Installeur à double-clic (`Install-PM-Suite.command`)
 - [x] Mise à jour depuis la PM-Suite (bouton « Mises à jour… »)
 - [x] Tags de version sur GitHub (`vX.Y.Z` à chaque release)
-- [ ] Validation de l'installeur sur un poste Resolve DMG
+- [x] Installeur validé sur Resolve App Store et sur Resolve DMG
 
 ## Limitations connues
 
-- **Installation DMG non validée** : l'installeur et l'updater ont été testés sur Resolve App Store ; sur DMG (dossiers système, droits admin), l'installeur est à valider.
 - **Markers → Stills** : le still reflète le grade actuel de la timeline ; l'export vers un volume réseau depuis Resolve App Store (sandbox) n'a pas encore été vérifié.
 - Dépendance à `tkinter` fourni par l'installation Python embarquée de Resolve — à vérifier après une mise à jour majeure de Resolve, certaines versions ayant eu des soucis connus avec `tkinter` sur macOS.
 - Les fichiers doivent être copiés localement sur chaque poste (pas de lien symbolique vers un volume réseau) pour que la suite fonctionne aussi hors réseau du studio.
