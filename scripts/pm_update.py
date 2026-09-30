@@ -39,6 +39,7 @@ BRANCH = "main"
 # Surchargeables pour tester hors GitHub (file:///…).
 VERSION_URL = os.environ.get("PM_UPDATE_VERSION_URL",
                              f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/scripts/VERSION")
+API_VERSION_URL = f"https://api.github.com/repos/{REPO}/contents/scripts/VERSION?ref={BRANCH}"
 ZIP_URL = os.environ.get("PM_UPDATE_ZIP_URL",
                          f"https://codeload.github.com/{REPO}/zip/refs/heads/{BRANCH}")
 
@@ -61,8 +62,11 @@ def is_newer(remote, local):
 
 
 # ── Réseau (curl) ──────────────────────────────────────────────────────────────
-def _curl(url, dest=None):
-    cmd = ["curl", "-fsSL", "--max-time", "120", url]
+def _curl(url, dest=None, headers=()):
+    cmd = ["curl", "-fsSL", "--max-time", "120"]
+    for h in headers:
+        cmd += ["-H", h]
+    cmd.append(url)
     if dest:
         cmd += ["-o", dest]
     try:
@@ -76,7 +80,20 @@ def _curl(url, dest=None):
 
 
 def fetch_remote_version():
-    return _curl(VERSION_URL).decode("utf-8").strip()
+    """
+    Lit scripts/VERSION sur GitHub. On passe par l'API (cache 60 s) plutôt que par
+    raw.githubusercontent.com dont le cache peut garder une ancienne valeur
+    plusieurs minutes après un push ; raw reste le secours si l'API est injoignable
+    ou saturée (60 requêtes/h par IP).
+    """
+    if "PM_UPDATE_VERSION_URL" in os.environ:          # tests hors GitHub
+        return _curl(VERSION_URL).decode("utf-8").strip()
+    try:
+        out = _curl(API_VERSION_URL, headers=["Accept: application/vnd.github.raw"])
+        parse_version(out.decode("utf-8"))             # refuse une réponse inattendue
+        return out.decode("utf-8").strip()
+    except (RuntimeError, ValueError):
+        return _curl(VERSION_URL).decode("utf-8").strip()
 
 
 def download_source(tmp_dir):
