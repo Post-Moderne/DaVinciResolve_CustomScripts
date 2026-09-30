@@ -45,6 +45,7 @@ TOOLS = [
     ("Metadata Find & Replace", "Recherche/remplacement dans les métadonnées des clips", "pm_tools.find_replace"),
     ("CSV → Start TC", "Met à jour le Start TC des clips depuis un fichier CSV", "pm_tools.csv_to_tc"),
     ("CSV → VFX ID", "Renomme les clips de la timeline avec les VFX ID d'un CSV (TC record)", "pm_tools.csv_to_vfxid"),
+    ("Markers → Stills", "Exporte un still à chaque marker, nommé d'après le marker", "pm_tools.markers_to_stills"),
     ("Timecode Extractor", "Extrait le Start TC depuis le nom de fichier (DJI, etc.)", "pm_tools.dji_tc"),
     ("BinBuilder", "Crée des bins/sous-bins en masse dans le Media Pool", "pm_tools.bin_builder"),
 ]

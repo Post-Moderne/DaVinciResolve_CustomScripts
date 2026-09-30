@@ -378,6 +378,31 @@ def pick_file(title="Choisir un fichier", extensions=None, parent=None):
         return ""
 
 
+def pick_folder(title="Choisir un dossier", parent=None):
+    """
+    Sélecteur de dossier : même logique que pick_file (osascript d'abord, car
+    filedialog ne s'affiche pas de façon fiable dans Resolve). Retourne "" si
+    annulé ou indisponible.
+    """
+    import subprocess
+    if sys.platform == "darwin":
+        script = f'POSIX path of (choose folder with prompt "{title}")'
+        try:
+            r = subprocess.run(["osascript", "-e", script], capture_output=True,
+                               text=True, timeout=600)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip().rstrip("/") or "/"
+            if "-128" in r.stderr:      # annulé par l'utilisateur
+                return ""
+        except (OSError, subprocess.SubprocessError):
+            pass
+    from tkinter import filedialog
+    try:
+        return filedialog.askdirectory(title=title, parent=parent) or ""
+    except Exception:
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # Boucle d'événements
 # ---------------------------------------------------------------------------
