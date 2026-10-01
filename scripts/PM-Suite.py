@@ -50,6 +50,13 @@ TOOLS = [
     ("BinBuilder", "Crée des bins/sous-bins en masse dans le Media Pool", "pm_tools.bin_builder"),
 ]
 
+# Outils en test, visibles sur toutes les stations dans la section repliable « BETA ».
+# Pousser en beta = ajouter l'outil ici + incrémenter scripts/VERSION + push.
+# Passer en production = déplacer la ligne de BETA_TOOLS vers TOOLS.
+BETA_TOOLS = [
+    ("SnapDrive Loader", "Analyse les timelines et importe leurs sources depuis les SnapDrive", "pm_tools.snapdrive_loader"),
+]
+
 
 class Launcher(tk.Tk):
     def __init__(self):
@@ -84,6 +91,9 @@ class Launcher(tk.Tk):
         for label, desc, module_name in TOOLS:
             self._tool_row(main, label, desc, module_name)
 
+        if BETA_TOOLS:
+            self._build_beta(main)
+
         tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x")
         footer = tk.Frame(self, bg=Theme.DARK_BG, pady=10)
         footer.pack(fill="x")
@@ -93,6 +103,33 @@ class Launcher(tk.Tk):
         tk.Button(footer, text="Quitter", font=Theme.FONT_SM, bg=Theme.FG_DIM, fg=Theme.DARK_BG,
                   relief="flat", bd=0, padx=14, pady=6, cursor="hand2",
                   command=self.destroy).pack(side="right", padx=20)
+
+    def _build_beta(self, parent):
+        """Section « BETA » repliable (fermée par défaut) : les outils en test, clairement identifiés."""
+        self._beta_open = False
+        self._beta_btn = tk.Button(parent, font=(Theme.FONT_UI[0], 10, "bold"), bg=Theme.DARK_BG,
+                                   fg=Theme.WARNING, activebackground=Theme.DARK_BG,
+                                   activeforeground=Theme.WARNING, relief="flat", bd=0, anchor="w",
+                                   cursor="hand2", command=self._toggle_beta)
+        self._beta_btn.pack(fill="x", pady=(12, 0))
+        self._beta_frame = tk.Frame(parent, bg=Theme.DARK_BG)
+        for label, desc, module_name in BETA_TOOLS:
+            self._tool_row(self._beta_frame, f"[BETA] {label}", desc, module_name)
+        self._refresh_beta()
+
+    def _refresh_beta(self):
+        arrow = "▾" if self._beta_open else "▸"
+        self._beta_btn.config(text=f"{arrow}  BETA  ({len(BETA_TOOLS)})  —  outils en test")
+        if self._beta_open:
+            self._beta_frame.pack(fill="x", after=self._beta_btn)
+        else:
+            self._beta_frame.pack_forget()
+
+    def _toggle_beta(self):
+        self._beta_open = not self._beta_open
+        self._refresh_beta()
+        self.update_idletasks()
+        self.geometry("")           # la fenêtre épouse son contenu
 
     def _tool_row(self, parent, label, desc, module_name):
         row = tk.Frame(parent, bg=Theme.PANEL_BG, highlightbackground=Theme.BORDER,

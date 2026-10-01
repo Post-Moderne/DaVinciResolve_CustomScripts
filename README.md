@@ -15,6 +15,20 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 | Timecode Extractor | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
 | BinBuilder | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
 
+### BETA
+
+Les outils en test sont rangés dans la section repliable **BETA** du lanceur (préfixe `[BETA]`). Ils sont déployés comme les autres, via « Mises à jour… ». Passer un outil en production = le déplacer de `BETA_TOOLS` vers `TOOLS` dans `scripts/PM-Suite.py`.
+
+| Outil BETA | Fonction |
+|---|---|
+| SnapDrive Loader | Analyse les timelines (clips offline d'un import XML/AAF) et les croise avec les SnapDrive (`.html`, scans de disques) : pull list par disque, introuvables, doublons, éléments ignorés, export CSV. « Importer les disques montés » importe les sources des disques branchés dans `_SnapDrive/<DISQUE>` (sans réimporter ce qui est déjà dans le projet). L'analyse est en lecture seule ; les timelines ne sont jamais modifiées. |
+
+## Tests
+
+```
+python3 -m unittest discover -s tests
+```
+
 ## Prérequis
 
 - DaVinci Resolve 18+
