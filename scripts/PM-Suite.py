@@ -42,7 +42,7 @@ import pm_common
 from pm_common import Theme, style_ttk, run_app
 
 TOOLS = [
-    ("Metadata Find & Replace", "Recherche/remplacement dans les métadonnées des clips", "pm_tools.find_replace"),
+    ("Find & Replace", "Recherche/remplacement dans les métadonnées (Media Pool) ou les noms de clips (Timeline)", "pm_tools.find_replace"),
     ("CSV → Start TC", "Met à jour le Start TC des clips depuis un fichier CSV", "pm_tools.csv_to_tc"),
     ("CSV → VFX ID", "Renomme les clips de la timeline avec les VFX ID d'un CSV (TC record)", "pm_tools.csv_to_vfxid"),
     ("Markers → Stills", "Exporte un still à chaque marker, nommé d'après le marker", "pm_tools.markers_to_stills"),

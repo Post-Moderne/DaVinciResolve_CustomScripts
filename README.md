@@ -8,7 +8,7 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 
 | Outil | Fonction |
 |---|---|
-| Metadata Find & Replace | Recherche/remplacement dans les métadonnées des clips du Media Pool. |
+| Find & Replace | Recherche/remplacement de texte, en deux onglets : métadonnées des clips du Media Pool, ou noms des clips de la timeline active (choix des pistes, prévisualisation, journal des anciens noms). |
 | CSV → Start TC | Met à jour le Start TC des clips à partir d'un `.csv` (colonnes `Name`/`Start`), avec relecture de confirmation après écriture. |
 | CSV → VFX ID | Renomme les clips de la timeline avec les VFX ID d'un `.csv` (colonnes VFX ID + TC record) : le TC record est comparé au point d'entrée des clips (piste au choix), avec aperçu avant application et journal des anciens noms. |
 | Markers → Stills | Exporte un still (PNG, JPG, TIFF ou DPX) à chaque marker de la timeline active, nommé d'après le nom du marker (repli : notes, puis TC). Filtre par couleur de marker ou toutes les couleurs, aperçu des noms de fichiers avant export, doublons suffixés (`_2`, `_3`…) sans jamais écraser, journal d'export. |
@@ -76,7 +76,7 @@ scripts/
   VERSION                 # source de vérité pour la version installée
   pm_tools/
     __init__.py
-    find_replace.py       # Metadata Find & Replace
+    find_replace.py       # Find & Replace (onglets Métadonnées + Timeline)
     csv_to_tc.py           # CSV → Start TC
     dji_tc.py               # Timecode Extractor
     csv_to_vfxid.py        # CSV → VFX ID
