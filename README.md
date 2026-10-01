@@ -4,7 +4,7 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 
 ## À quoi ça sert
 
-**PM Suite** est le point d'entrée unique : une fenêtre lanceur qui donne accès aux 6 outils ci-dessous, chacun agissant directement sur le projet Resolve ouvert via l'API de scripting (`bmd.scriptapp("Resolve")`).
+**PM Suite** est le point d'entrée unique : une fenêtre lanceur qui donne accès aux 7 outils ci-dessous, chacun agissant directement sur le projet Resolve ouvert via l'API de scripting (`bmd.scriptapp("Resolve")`).
 
 | Outil | Fonction |
 |---|---|
@@ -14,14 +14,13 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 | Markers → Stills | Exporte un still (PNG, JPG, TIFF ou DPX) à chaque marker de la timeline active, nommé d'après le nom du marker (repli : notes, puis TC). Filtre par couleur de marker ou toutes les couleurs, aperçu des noms de fichiers avant export, doublons suffixés (`_2`, `_3`…) sans jamais écraser, journal d'export. |
 | Timecode Extractor | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
 | BinBuilder | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
+| SnapDrive Loader | Analyse les timelines (clips offline d'un import XML/AAF) et les croise avec les SnapDrive (`.html`, scans de disques) : pull list par disque, introuvables, doublons, éléments ignorés, export CSV. « Importer les disques montés » importe les sources des disques branchés dans `_SnapDrive/<DISQUE>` (sans réimporter ce qui est déjà dans le projet). L'analyse est en lecture seule ; les timelines ne sont jamais modifiées. |
 
 ### BETA
 
 Les outils en test sont rangés dans la section repliable **BETA** du lanceur (préfixe `[BETA]`). Ils sont déployés comme les autres, via « Mises à jour… ». Passer un outil en production = le déplacer de `BETA_TOOLS` vers `TOOLS` dans `scripts/PM-Suite.py`.
 
-| Outil BETA | Fonction |
-|---|---|
-| SnapDrive Loader | Analyse les timelines (clips offline d'un import XML/AAF) et les croise avec les SnapDrive (`.html`, scans de disques) : pull list par disque, introuvables, doublons, éléments ignorés, export CSV. « Importer les disques montés » importe les sources des disques branchés dans `_SnapDrive/<DISQUE>` (sans réimporter ce qui est déjà dans le projet). L'analyse est en lecture seule ; les timelines ne sont jamais modifiées. |
+Aucun outil en BETA pour le moment (la section n'apparaît dans le lanceur que si `BETA_TOOLS` n'est pas vide).
 
 ## Tests
 

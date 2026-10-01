@@ -48,13 +48,13 @@ TOOLS = [
     ("Markers → Stills", "Exporte un still à chaque marker, nommé d'après le marker", "pm_tools.markers_to_stills"),
     ("Timecode Extractor", "Extrait le Start TC depuis le nom de fichier (DJI, etc.)", "pm_tools.dji_tc"),
     ("BinBuilder", "Crée des bins/sous-bins en masse dans le Media Pool", "pm_tools.bin_builder"),
+    ("SnapDrive Loader", "Analyse les timelines et importe leurs sources depuis les SnapDrive", "pm_tools.snapdrive_loader"),
 ]
 
 # Outils en test, visibles sur toutes les stations dans la section repliable « BETA ».
 # Pousser en beta = ajouter l'outil ici + incrémenter scripts/VERSION + push.
 # Passer en production = déplacer la ligne de BETA_TOOLS vers TOOLS.
 BETA_TOOLS = [
-    ("SnapDrive Loader", "Analyse les timelines et importe leurs sources depuis les SnapDrive", "pm_tools.snapdrive_loader"),
 ]
 
 
