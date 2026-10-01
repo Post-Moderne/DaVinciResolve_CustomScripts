@@ -10,7 +10,7 @@ import os
 import sys
 import fnmatch
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pm_common
@@ -169,8 +169,13 @@ class BinBuilderWindow(PMWindow):
 
         cadre_apercu = ttk.LabelFrame(main, text="Aperçu de l'arborescence à créer")
         cadre_apercu.pack(fill="both", expand=True, pady=(0, 10))
-        self.arbre_apercu = ttk.Treeview(cadre_apercu, show="tree", height=8)
+        self.arbre_apercu = ttk.Treeview(cadre_apercu, show="tree", height=8, selectmode="extended")
         self.arbre_apercu.pack(fill="both", expand=True, padx=5, pady=5)
+        self.arbre_apercu.bind("<Delete>", lambda e: self._retirer_selection())
+        self.arbre_apercu.bind("<BackSpace>", lambda e: self._retirer_selection())
+        self._noeuds_apercu = {}  # id Treeview -> (BinNode, liste parente)
+        ttk.Button(cadre_apercu, text="Retirer la sélection (Suppr)",
+                   command=self._retirer_selection).pack(anchor="e", padx=5, pady=(0, 5))
 
         cadre_actions = tk.Frame(main, bg=Theme.DARK_BG)
         cadre_actions.pack(fill="x")
@@ -191,7 +196,7 @@ class BinBuilderWindow(PMWindow):
         cadre_chemin.pack(fill="x", padx=10, pady=5)
         self.chemin_var = tk.StringVar(value="(aucun dossier sélectionné)")
         ttk.Label(cadre_chemin, textvariable=self.chemin_var).pack(side="left", fill="x", expand=True)
-        ttk.Button(cadre_chemin, text="Choisir…", command=self._choisir_dossier).pack(side="right")
+        ttk.Button(cadre_chemin, text="Parcourir…", command=self._choisir_dossier).pack(side="right")
 
         self.inclure_racine_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(onglet, text="Créer un bin pour le dossier sélectionné lui-même (pas seulement son contenu)",
@@ -223,7 +228,7 @@ class BinBuilderWindow(PMWindow):
 
     # -- Actions ---------------------------------------------------------
     def _choisir_dossier(self):
-        chemin = filedialog.askdirectory(title="Choisir le dossier à reproduire")
+        chemin = pm_common.pick_folder("Choisir le dossier à reproduire", parent=self)
         if chemin:
             self.chemin_dossier_source = chemin
             self.chemin_var.set(chemin)
@@ -270,10 +275,12 @@ class BinBuilderWindow(PMWindow):
     def _afficher_apercu(self, arbre):
         """Peuple le Treeview d'aperçu et active le bouton de création."""
         self.arbre_apercu.delete(*self.arbre_apercu.get_children())
+        self._noeuds_apercu = {}
 
         def inserer(parent_tk, nodes):
             for node in nodes:
                 item_id = self.arbre_apercu.insert(parent_tk, "end", text=node.name, open=True)
+                self._noeuds_apercu[item_id] = (node, nodes)
                 if node.children:
                     inserer(item_id, node.children)
 
@@ -281,9 +288,28 @@ class BinBuilderWindow(PMWindow):
 
         self.arbre_en_attente = arbre
         self.bouton_creer.config(state="normal")
+        self._maj_statut()
 
-        nb_total = self._compter_bins(arbre)
+    def _maj_statut(self):
+        nb_total = self._compter_bins(self.arbre_en_attente)
         self.label_statut.config(text=f"{nb_total} bin(s) prêt(s) à être créé(s). Vérifie l'aperçu ci-dessus.")
+
+    def _retirer_selection(self):
+        """Retire de l'aperçu (et donc de la création) les bins sélectionnés, sous-bins compris."""
+        if not self.arbre_en_attente:
+            return
+        for item_id in self.arbre_apercu.selection():
+            if not self.arbre_apercu.exists(item_id):  # déjà parti avec son parent
+                continue
+            node, liste = self._noeuds_apercu[item_id]
+            liste.remove(node)  # liste = arbre racine ou node.children du parent
+            self.arbre_apercu.delete(item_id)
+        if self._compter_bins(self.arbre_en_attente):
+            self._maj_statut()
+        else:
+            self.arbre_en_attente = None
+            self.bouton_creer.config(state="disabled")
+            self.label_statut.config(text="Aperçu vide : rien à créer.")
 
     def _compter_bins(self, arbre):
         total = 0

@@ -18,7 +18,7 @@ import os
 import sys
 import csv
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pm_common
@@ -146,18 +146,9 @@ class CsvToTcWindow(PMWindow):
 
     # ---------------------------------------------------------------- Parcourir
     def on_browse(self):
-        """Tente d'ouvrir le dialogue natif. Dans l'environnement sandboxé de Resolve,
-        ce dialogue peut échouer silencieusement ou planter — on protège l'appel et on
-        retombe sur la saisie manuelle du chemin si besoin."""
-        try:
-            path = filedialog.askopenfilename(
-                title="Choisir le fichier CSV",
-                filetypes=[("CSV", "*.csv"), ("Tous les fichiers", "*.*")]
-            )
-        except Exception as e:
-            self.log_write(self.log, f"[INFO] Le dialogue natif a échoué ({e}). "
-                            "Colle le chemin du CSV directement dans le champ ci-dessus.\n", "dim")
-            return
+        """Ouvre le sélecteur système (osascript) ; filedialog ne s'affiche pas de façon
+        fiable dans Resolve. En cas d'échec, saisie manuelle du chemin."""
+        path = pm_common.pick_file("Choisir le fichier CSV", ["csv"], parent=self)
 
         if path:
             self.path_var.set(path)
