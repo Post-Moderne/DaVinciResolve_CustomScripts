@@ -39,8 +39,24 @@ PATHS = {
 }
 
 
-def resolve_variant():
-    """Retourne 'appstore', 'dmg' ou 'unknown' selon la variante Resolve détectée."""
+def resolve_variant(module_file=None):
+    """
+    Retourne 'appstore', 'dmg' ou 'unknown'.
+
+    1. Source de vérité : l'endroit où CE module est installé. Une copie sous le
+       conteneur App Store appartient à Resolve App Store, une copie sous
+       /Library/Application Support/Blackmagic Design à Resolve DMG — ce qui reste
+       juste quand les deux versions cohabitent sur le poste.
+    2. Repli (module lancé depuis le repo, etc.) : le premier dossier Fusion/Scripts
+       qui existe. Attention : le conteneur App Store survit à la suppression de
+       l'app, donc ce repli peut se tromper sur un poste où l'App Store a été retiré.
+    """
+    here = os.path.realpath(os.path.dirname(os.path.abspath(module_file or __file__)))
+    for variant, p in PATHS.items():
+        for root in (p["modules"], p["scripts"]):
+            root = os.path.realpath(root)
+            if here == root or here.startswith(root + os.sep):
+                return variant
     for variant, p in PATHS.items():
         if os.path.isdir(p["scripts"]):
             return variant
@@ -88,7 +104,11 @@ def get_resolve_objects():
     module importé par celui-ci (l'injection de globale ne traverse pas les
     frontières d'import).
     """
-    for p in (PATHS["appstore"]["modules"], PATHS["dmg"]["modules"]):
+    # La variante courante est insérée en dernier, donc en tête de sys.path : quand
+    # les deux Resolve cohabitent, on importe le DaVinciResolveScript de la bonne.
+    order = sorted(PATHS, key=lambda v: v == RESOLVE_VARIANT)
+    for v in order:
+        p = PATHS[v]["modules"]
         if p not in sys.path:
             sys.path.insert(0, p)
 
