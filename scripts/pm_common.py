@@ -313,19 +313,23 @@ class PMWindow(tk.Toplevel):
         b.pack(side=side, padx=(padx_l, 0))
         return b
 
-    def build_log(self, parent, height=14):
-        """Construit une zone de log taguée et retourne le widget tk.Text."""
+    def build_log(self, parent, height=14, expanded=False):
+        """
+        Construit une zone de log taguée, repliable (clic sur l'en-tête « LOG »), et
+        retourne le widget tk.Text. Repliée par défaut ; elle s'ouvre toute seule dès
+        qu'une ligne d'erreur (tag "err") y est écrite, pour ne jamais cacher un échec.
+        """
         sep = tk.Frame(parent, bg=Theme.BORDER, height=1)
         sep.pack(fill="x", pady=(16, 0))
 
-        log_hdr = tk.Frame(parent, bg=Theme.DARK_BG)
+        log_hdr = tk.Frame(parent, bg=Theme.DARK_BG, cursor="hand2")
         log_hdr.pack(fill="x", pady=(8, 4))
-        tk.Label(log_hdr, text="LOG", font=(Theme.FONT_UI[0], 10, "bold"),
-                  bg=Theme.DARK_BG, fg=Theme.FG_DIM).pack(side="left")
+        arrow = tk.Label(log_hdr, font=(Theme.FONT_UI[0], 10, "bold"),
+                          bg=Theme.DARK_BG, fg=Theme.FG_DIM, cursor="hand2")
+        arrow.pack(side="left")
 
         log_frame = tk.Frame(parent, bg=Theme.PANEL_BG, bd=0,
                               highlightbackground=Theme.BORDER, highlightthickness=1)
-        log_frame.pack(fill="both", expand=True)
 
         log = tk.Text(log_frame, bg=Theme.PANEL_BG, fg=Theme.FG,
                        font=Theme.FONT_MONO, bd=0, relief="flat",
@@ -337,6 +341,25 @@ class PMWindow(tk.Toplevel):
                            troughcolor=Theme.PANEL_BG, bd=0, relief="flat")
         sb.pack(side="right", fill="y")
         log.config(yscrollcommand=sb.set)
+
+        state = {"open": False}
+
+        def set_open(opened):
+            state["open"] = opened
+            arrow.config(text=("▾  LOG" if opened else "▸  LOG"))
+            if opened:
+                log_frame.pack(fill="both", expand=True, after=log_hdr)
+                top = log.winfo_toplevel()
+                top.update_idletasks()
+                if top.winfo_reqheight() > top.winfo_height():     # fait grandir la fenêtre au besoin
+                    top.geometry(f"{top.winfo_width()}x{top.winfo_reqheight()}")
+            else:
+                log_frame.pack_forget()
+
+        for w in (log_hdr, arrow):
+            w.bind("<Button-1>", lambda e: set_open(not state["open"]))
+        log._pm_set_open = set_open
+        set_open(expanded)
 
         log.tag_config("dim", foreground=Theme.FG_DIM)
         log.tag_config("ok", foreground=Theme.SUCCESS)
@@ -353,6 +376,8 @@ class PMWindow(tk.Toplevel):
         log_widget.insert("end", text, tag) if tag else log_widget.insert("end", text)
         log_widget.see("end")
         log_widget.config(state="disabled")
+        if tag == "err" and hasattr(log_widget, "_pm_set_open"):
+            log_widget._pm_set_open(True)       # une erreur ne reste jamais cachée
 
     @staticmethod
     def log_clear(log_widget):
