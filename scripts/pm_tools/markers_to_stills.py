@@ -21,6 +21,8 @@ ignorées ; si tout est vide, le nom devient « Marker_<TC> ». Le « clip du de
 est le clip activé de la piste vidéo la plus haute qui couvre la frame du marker.
 Les caractères interdits sont remplacés par « _ » ; en cas de doublon (dans le lot
 ou déjà sur le disque) un suffixe _2, _3… est ajouté : rien n'est jamais écrasé.
+Un « délai de rendu » optionnel (0 par défaut) laisse à Resolve le temps d'afficher les
+frames lourdes (Fusion, gros étalonnage) avant chaque export.
 La dernière configuration est mémorisée (~/Logs/PM-Suite/config/).
 Le still reflète le grade actuel de la timeline.
 """
@@ -73,6 +75,7 @@ BRICKS = {
 DEFAULT_PIECES = [{"id": "marker_name"}]
 SEPARATORS = {"_  (underscore)": "_", "-  (tiret)": "-", "espace": " ", "aucun": ""}
 DATE_FORMATS = {"AAAA-MM-JJ": "%Y-%m-%d", "AAMMJJ": "%y%m%d", "AAAAMMJJ": "%Y%m%d"}
+RENDER_DELAYS = {"0 s": 0.0, "0,5 s": 0.5, "1 s": 1.0, "2 s": 2.0, "3 s": 3.0}
 CONFIG_PATH = os.path.join(pm_common.LOG_ROOT, "config", "markers_to_stills.json")
 
 
@@ -313,6 +316,13 @@ class MarkersToStillsWindow(PMWindow):
                            values=list(DATE_FORMATS))
         cmb.pack(side="left", padx=6)
         cmb.bind("<<ComboboxSelected>>", lambda e: self._on_naming_changed())
+        self._label(fmt, "Délai de rendu :").pack(side="left", padx=(16, 0))
+        delay_name = self._cfg.get("render_delay") if self._cfg.get("render_delay") in RENDER_DELAYS else "0 s"
+        self.delay_var = tk.StringVar(value=delay_name)
+        cmb = ttk.Combobox(fmt, textvariable=self.delay_var, width=6, state="readonly",
+                           values=list(RENDER_DELAYS))
+        cmb.pack(side="left", padx=6)
+        cmb.bind("<<ComboboxSelected>>", lambda e: self._save_cfg())
         self.skip_var = tk.BooleanVar(value=self._cfg.get("skip_no_media", True))
         tk.Checkbutton(fmt, text="Ignorer les clips sans média (titres, adjustment…)",
                        variable=self.skip_var, command=self._on_naming_changed,
@@ -395,7 +405,7 @@ class MarkersToStillsWindow(PMWindow):
 
     def _save_cfg(self):
         save_config({"pieces": self.pieces, "sep": self._sep(), "date_fmt": self.date_var.get(),
-                     "ext": self.fmt_var.get(), "skip_no_media": bool(self.skip_var.get())})
+                     "ext": self.fmt_var.get(), "render_delay": self.delay_var.get(), "skip_no_media": bool(self.skip_var.get())})
 
     # ---------------------------------------------------------- Resolve init
     def _init_resolve(self):
@@ -541,9 +551,17 @@ class MarkersToStillsWindow(PMWindow):
                 return True
         return False
 
+    def _wait(self, seconds):
+        """Attente (délai de rendu) qui garde l'interface vivante."""
+        end = time.time() + seconds
+        while time.time() < end:
+            time.sleep(0.05)
+            self.update()
+
     def _export_one(self, p):
         if not self._goto(p["tc"]):
             return False, "playhead non positionné"
+        self._wait(RENDER_DELAYS.get(self.delay_var.get(), 0.0))
         for _ in range(3):
             ok = self.project.ExportCurrentFrameAsStill(p["path"])
             for _ in range(10):         # l'écriture peut finir après le retour de l'API
