@@ -37,6 +37,31 @@ class NotesTests(unittest.TestCase):
         self.assertEqual(rows, [("A", "01:00:00:00", "x")])
 
 
+class ErrorAndSampleTests(unittest.TestCase):
+    def test_error_message_is_explicit(self):
+        with self.assertRaises(v.ColumnsNotFound) as cm:
+            v.read_csv_rows(write("Plan,Foo\nA,B\n"))
+        msg = str(cm.exception)
+        self.assertIn("VFX ID", msg)
+        self.assertIn("Plan, Foo", msg)          # montre ce qui a été lu
+        self.assertIn("Record In", msg)
+
+    def test_error_names_only_missing_column(self):
+        with self.assertRaises(v.ColumnsNotFound) as cm:
+            v.read_csv_rows(write("VFX ID,Foo\nA,B\n"))
+        self.assertIn("TC record", str(cm.exception).split("\n")[0])
+        self.assertNotIn("colonne VFX ID", str(cm.exception).split("\n")[0])
+
+    def test_sample_roundtrip_no_overwrite(self):
+        d = tempfile.mkdtemp()
+        p1, p2 = v.write_sample_csv(d), v.write_sample_csv(d)
+        self.assertNotEqual(p1, p2)
+        rows = v.read_csv_rows(p1)
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(rows[0][2])
+        self.assertEqual(v.tc_to_frames(rows[0][1], 24), (3600 + 5) * 24)
+
+
 class MarkerFrameTests(unittest.TestCase):
     def test_relative_to_timeline_start(self):
         tl_start = 86400                        # 01:00:00:00 à 24 fps

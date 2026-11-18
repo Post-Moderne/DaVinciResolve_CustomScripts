@@ -73,7 +73,7 @@ def tc_to_frames(tc, fps, drop_frame=False):
     """'HH:MM:SS:FF' → numéro de frame absolu. Lève ValueError si le format est invalide."""
     m = TC_RE.match(tc or "")
     if not m:
-        raise ValueError(f"Timecode invalide : '{tc}'")
+        raise ValueError(f"Timecode invalide : '{tc}' (attendu HH:MM:SS:FF)")
     h, mi, s, f = (int(x) for x in m.groups())
     nominal = int(round(float(fps)))
     total = (h * 3600 + mi * 60 + s) * nominal + f
@@ -103,6 +103,32 @@ def read_text(path):
     return pm_common.read_text_file(path)
 
 
+class ColumnsNotFound(ValueError):
+    """Colonnes VFX ID / TC record introuvables ; le message explique quoi corriger."""
+
+
+SAMPLE_FILENAME = "exemple_VFX-ID.csv"
+SAMPLE_ROWS = [
+    ("VFX ID", "Record In", "Notes"),
+    ("VFX_010", "01:00:05:00", "Retirer le fil visible à gauche"),
+    ("VFX_020", "01:00:12:10", "Remplacer l'écran du téléphone"),
+    ("VFX_030", "01:01:03:00", ""),
+]
+
+
+def write_sample_csv(folder):
+    """Écrit le CSV exemple dans folder sans écraser un fichier existant. Retourne le chemin."""
+    base, ext = os.path.splitext(SAMPLE_FILENAME)
+    path = os.path.join(folder, SAMPLE_FILENAME)
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(folder, f"{base}_{n}{ext}")
+        n += 1
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:      # BOM : accents corrects dans Excel
+        csv.writer(f).writerows(SAMPLE_ROWS)
+    return path
+
+
 def read_csv_rows(path):
     """
     Retourne une liste de tuples (vfx_id, record_tc, note) (note = "" sans colonne de notes). L'en-tête est cherché dans
@@ -123,11 +149,21 @@ def read_csv_rows(path):
             notes_col = find_column(header, [h for h in NOTES_HEADERS if h not in (_norm(header[id_col]), _norm(header[tc_col]))])
             break
     else:
-        first = rows[1] if len(rows) > 1 else (rows[0] if rows else [])
-        raise ValueError(
-            f"Colonnes introuvables (ligne d'en-tête testée : {first}).\n"
-            f"Attendu : un VFX ID ({', '.join(ID_HEADERS[:4])}…) "
-            f"et un TC record ({', '.join(TC_HEADERS[:4])}…)."
+        first = next((r for r in rows[:15] if any(c.strip() for c in r)), [])
+        have_id = any(find_column(r, ID_HEADERS) is not None for r in rows[:15])
+        have_tc = any(find_column(r, TC_HEADERS) is not None for r in rows[:15])
+        problems = []
+        if not have_id:
+            problems.append("la colonne VFX ID (nom : VFX ID, ID, Shot, Nom…)")
+        if not have_tc:
+            problems.append("la colonne du TC record (nom : Record In, Rec In, Start, Timecode…)")
+        raise ColumnsNotFound(
+            "Ce CSV ne peut pas être lu : il manque " + " et ".join(problems) + ".\n\n"
+            f"Colonnes lues dans ton fichier : {', '.join(c.strip() or '(vide)' for c in first) or '(fichier vide)'}\n\n"
+            "Il faut une ligne d'en-têtes avec au minimum :\n"
+            "   VFX ID  |  Record In   (+ Notes, facultatif)\n"
+            "   VFX_010 |  01:00:05:00\n\n"
+            "Renomme les en-têtes dans ton CSV, ou génère un CSV exemple."
         )
 
     out = []
@@ -185,6 +221,7 @@ class CsvToVfxIdWindow(PMWindow):
         entry.bind("<Return>", lambda e: self.on_load_csv())
         self.button(top, "Parcourir…", Theme.PANEL_BG, self.on_browse, side="left")
         self.button(top, "Charger", Theme.PANEL_BG, self.on_load_csv, side="left", padx_l=6)
+        self.button(top, "CSV exemple…", Theme.PANEL_BG, self.on_sample_csv, side="left", padx_l=6)
         self.btn_apply = self.button(top, "Appliquer", Theme.SUCCESS, self.on_apply, side="right")
         self.btn_apply.config(state="disabled")
 
@@ -284,6 +321,21 @@ class CsvToVfxIdWindow(PMWindow):
             self.log_write(self.log, "[INFO] Aucun fichier choisi (ou sélecteur indisponible). "
                             "Colle le chemin du CSV dans le champ.\n", "dim")
 
+    def on_sample_csv(self):
+        """Écrit un CSV exemple (VFX ID / Record In / Notes) dans le dossier choisi."""
+        folder = pm_common.pick_folder("Où enregistrer le CSV exemple ?", parent=self)
+        if not folder:
+            return
+        try:
+            path = write_sample_csv(folder)
+        except OSError as e:
+            messagebox.showerror("Erreur", f"Impossible d'écrire le CSV exemple :\n{e}")
+            return
+        self.log_write(self.log, f"CSV exemple créé : {path}\n", "ok")
+        messagebox.showinfo("CSV exemple créé",
+                            f"{path}\n\nColonnes : VFX ID (nom du plan), Record In (TC d'entrée du clip "
+                            "dans la timeline, HH:MM:SS:FF) et Notes (facultatif).")
+
     def on_load_csv(self):
         if self.project is None:
             messagebox.showerror("Erreur", "Pas de connexion active à Resolve.")
@@ -294,6 +346,10 @@ class CsvToVfxIdWindow(PMWindow):
             return
         try:
             self.csv_rows = read_csv_rows(path)
+        except ColumnsNotFound as e:
+            if messagebox.askyesno("Colonnes introuvables", f"{e}\n\nCréer un CSV exemple maintenant ?"):
+                self.on_sample_csv()
+            return
         except Exception as e:
             messagebox.showerror("Erreur de lecture CSV", str(e))
             return
