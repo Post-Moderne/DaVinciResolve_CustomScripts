@@ -76,18 +76,24 @@ def _get_clip_value(clip, column):
     return val or ""
 
 
+def _confirmed(clip, column, value):
+    """Relit la valeur après écriture : le retour des Set*() n'est pas fiable
+    (ex. SetClipProperty("Clip Name") renvoie False alors que le nom change)."""
+    return _get_clip_value(clip, column) == value
+
+
 def _set_clip_value(clip, column, value):
     try:
         ok = clip.SetClipProperty(column, value)
     except Exception:
         ok = False
-    if ok:
+    if ok or _confirmed(clip, column, value):
         return True, "ClipProperty"
     try:
         ok = clip.SetMetadata(column, value)
     except Exception:
         ok = False
-    if ok:
+    if ok or _confirmed(clip, column, value):
         return True, "Metadata"
     return False, "aucune méthode n'a fonctionné"
 

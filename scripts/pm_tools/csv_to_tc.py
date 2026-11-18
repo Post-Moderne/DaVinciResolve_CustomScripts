@@ -17,6 +17,8 @@ valeur après écriture pour confirmer le succès réel, plutôt que de se fier
 import os
 import sys
 import csv
+import io
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -48,13 +50,92 @@ def build_name_index(all_clips):
     return index
 
 
-def read_csv_rows(path):
+NAME_ALIASES = ["name", "clip name", "clipname", "file name", "filename", "file", "nom",
+                "nom du clip", "nom de fichier", "clip", "source file", "source name"]
+START_ALIASES = ["start", "start tc", "starttc", "start timecode", "timecode", "time code",
+                 "tc", "tc in", "source in", "source tc", "debut", "début", "tc debut", "tc début"]
+
+
+class ColumnsNotFound(ValueError):
+    """Colonnes Name/Start introuvables. Porte les en-têtes lus et les meilleures suppositions."""
+
+    def __init__(self, fieldnames, name_col=None, start_col=None):
+        self.fieldnames = list(fieldnames)
+        self.name_col = name_col
+        self.start_col = start_col
+        super().__init__(
+            f"Colonnes requises introuvables. Colonnes détectées : {self.fieldnames}\n"
+            "Le CSV doit contenir une colonne 'Name' et une colonne 'Start'."
+        )
+
+
+def detect_columns(fieldnames):
+    """Retourne (name_col, start_col) : colonne exacte 'Name'/'Start' d'abord, puis alias courants.
+    Une valeur vaut None si rien ne correspond."""
+    norm = {(fn or "").strip().lower(): fn for fn in fieldnames}
+
+    def pick(aliases):
+        for a in aliases:
+            if a in norm:
+                return norm[a]
+        return None
+
+    return pick(NAME_ALIASES), pick(START_ALIASES)
+
+
+_TC_OK = re.compile(r"^(\d\d):(\d\d):(\d\d)([:;])(\d\d)$")
+
+
+def normalize_tc(raw):
+    """
+    Valide / répare un timecode. Retourne (tc, statut, détail) :
+      statut "ok"      — déjà au format HH:MM:SS:FF (ou ;FF en drop-frame)
+      statut "fixed"   — réparé automatiquement (détail = ce qui a été corrigé)
+      statut "invalid" — irréparable (détail = raison)
+    """
+    s = (raw or "").strip()
+    if not s:
+        return "", "invalid", "TC vide"
+    m = _TC_OK.match(s)
+    if m:
+        h, mi, se = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if h > 23 or mi > 59 or se > 59:
+            return s, "invalid", "heures/minutes/secondes hors limites"
+        return s, "ok", ""
+
+    last_sep = ";" if re.search(r"\d;\d+$", s) else ":"       # drop-frame : on garde le ';' final
+    if re.fullmatch(r"\d{6}|\d{8}", s):
+        parts = [s[i:i + 2] for i in range(0, len(s), 2)]
+    else:
+        parts = re.split(r"[:;.,\s]+", s)
+    if not parts or not all(p.isdigit() and len(p) <= 3 for p in parts) or len(parts) not in (3, 4):
+        return s, "invalid", "format non reconnu (attendu HH:MM:SS:FF)"
+    note = []
+    if len(parts) == 3:
+        parts.append("00")
+        note.append("images ajoutées (:00)")
+    parts = [p.zfill(2) for p in parts]
+    if any(len(p) > 2 for p in parts):
+        return s, "invalid", "champ trop long (attendu HH:MM:SS:FF)"
+    if int(parts[0]) > 23 or int(parts[1]) > 59 or int(parts[2]) > 59:
+        return s, "invalid", "heures/minutes/secondes hors limites"
+    fixed = ":".join(parts[:3]) + last_sep + parts[3]
+    if not note:
+        note.append("séparateurs/zéros normalisés")
+    return fixed, "fixed", ", ".join(note)
+
+
+def read_csv_rows(path, columns=None, info=None):
     """
     Retourne une liste de tuples (name, start_tc) depuis le CSV.
-    Détecte automatiquement , ou ; comme délimiteur.
-    Lève ValueError si les colonnes "Name" ou "Start" sont absentes.
+    Détecte automatiquement , ou ; comme délimiteur, et reconnaît les en-têtes
+    courants (Clip Name, Timecode, Start TC, Nom…).
+    columns=(name_col, start_col) force le choix des colonnes (dialogue de mappage).
+    info (dict, optionnel) reçoit 'name_col', 'start_col' et 'auto' (True si alias).
+    Lève ColumnsNotFound (ValueError) si les colonnes restent introuvables.
     """
-    with open(path, newline="", encoding="utf-8-sig") as f:
+    # UTF-16 (export Resolve), UTF-8 ou encodages Excel — détectés automatiquement
+    with io.StringIO(pm_common.read_text_file(path), newline="") as f:
         sample = f.read(4096)
         f.seek(0)
         try:
@@ -64,14 +145,15 @@ def read_csv_rows(path):
         reader = csv.DictReader(f, dialect=dialect)
 
         fieldnames = reader.fieldnames or []
-        norm = {fn.strip().lower(): fn for fn in fieldnames}
-        if "name" not in norm or "start" not in norm:
-            raise ValueError(
-                f"Colonnes requises introuvables. Colonnes détectées : {fieldnames}\n"
-                "Le CSV doit contenir une colonne 'Name' et une colonne 'Start'."
-            )
-        name_col = norm["name"]
-        start_col = norm["start"]
+        if columns:
+            name_col, start_col = columns
+        else:
+            name_col, start_col = detect_columns(fieldnames)
+        if name_col not in fieldnames or start_col not in fieldnames:
+            raise ColumnsNotFound(fieldnames, name_col, start_col)
+        if info is not None:
+            info.update(name_col=name_col, start_col=start_col,
+                        auto=(name_col.strip().lower() != "name" or start_col.strip().lower() != "start"))
 
         rows = []
         for row in reader:
@@ -80,6 +162,29 @@ def read_csv_rows(path):
             if name:
                 rows.append((name, start))
         return rows
+
+
+SAMPLE_FILENAME = "exemple_StartTC.csv"
+SAMPLE_ROWS = [
+    ("Name", "Start"),
+    ("A001_C001_0101AB.mov", "01:00:00:00"),
+    ("A001_C002_0101AB.mov", "01:05:12:10"),
+    ("B002_C001_0102CD.mov", "02:00:00:00"),
+]
+
+
+def write_sample_csv(folder):
+    """Écrit le CSV exemple dans folder sans écraser un fichier existant. Retourne le chemin."""
+    base, ext = os.path.splitext(SAMPLE_FILENAME)
+    path = os.path.join(folder, SAMPLE_FILENAME)
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(folder, f"{base}_{n}{ext}")
+        n += 1
+    # UTF-8 avec BOM : s'ouvre correctement dans Excel (accents) et est relu par read_csv_rows
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f).writerows(SAMPLE_ROWS)
+    return path
 
 
 class CsvToTcWindow(PMWindow):
@@ -109,6 +214,7 @@ class CsvToTcWindow(PMWindow):
 
         self.button(top, "Parcourir…", Theme.PANEL_BG, self.on_browse, side="left", padx_l=0)
         self.button(top, "Charger", Theme.PANEL_BG, self.on_load_csv, side="left", padx_l=6)
+        self.button(top, "CSV exemple…", Theme.PANEL_BG, self.on_sample_csv, side="left", padx_l=6)
         self.btn_apply = self.button(top, "Appliquer", Theme.SUCCESS, self.on_apply, side="right")
         self.btn_apply.config(state="disabled")
 
@@ -157,6 +263,75 @@ class CsvToTcWindow(PMWindow):
             self.log_write(self.log, "[INFO] Aucun fichier sélectionné (ou dialogue non supporté ici). "
                             "Colle le chemin du CSV directement dans le champ ci-dessus.\n", "dim")
 
+    # ---------------------------------------------------------------- CSV exemple
+    def on_sample_csv(self):
+        folder = pm_common.pick_folder("Où enregistrer le CSV exemple ?", parent=self)
+        if not folder:
+            return
+        self._create_sample(folder)
+
+    def _create_sample(self, folder):
+        try:
+            path = write_sample_csv(folder)
+        except OSError as e:
+            messagebox.showerror("Erreur", f"Impossible d'écrire le CSV exemple :\n{e}")
+            return
+        self.log_write(self.log, f"CSV exemple créé : {path}\n"
+                        "Format : colonnes 'Name' (nom exact du clip) et 'Start' (HH:MM:SS:FF), "
+                        "séparateur , ou ;\n", "ok")
+        messagebox.showinfo("CSV exemple créé",
+                            f"{path}\n\nColonnes : Name (nom du clip tel qu'affiché dans le Media Pool) "
+                            "et Start (timecode HH:MM:SS:FF).")
+
+    def _ask_columns(self, err):
+        """Dialogue modal : l'utilisateur désigne les colonnes nom / TC. Retourne (name, start) ou None."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Colonnes du CSV")
+        dlg.configure(bg=Theme.DARK_BG)
+        dlg.transient(self)
+        dlg.resizable(False, False)
+        body = tk.Frame(dlg, bg=Theme.DARK_BG, padx=20, pady=16)
+        body.pack()
+        tk.Label(body, justify="left", bg=Theme.DARK_BG, fg=Theme.FG,
+                 text="Je ne reconnais pas les colonnes de ce CSV.\n"
+                      "Indique laquelle contient le nom du clip et laquelle contient le Start TC\n"
+                      "(ou génère un CSV exemple pour voir le format attendu).").pack(anchor="w")
+        choices = [f for f in err.fieldnames if f]
+        nv = tk.StringVar(value=err.name_col or "")
+        sv = tk.StringVar(value=err.start_col or "")
+        for label, var in (("Nom du clip :", nv), ("Start TC :", sv)):
+            row = tk.Frame(body, bg=Theme.DARK_BG)
+            row.pack(fill="x", pady=(10, 0))
+            tk.Label(row, text=label, width=14, anchor="w", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
+            ttk.Combobox(row, textvariable=var, values=choices, state="readonly", width=34).pack(side="left")
+        result = {"cols": None}
+
+        def ok():
+            if not nv.get() or not sv.get() or nv.get() == sv.get():
+                messagebox.showwarning("Colonnes", "Choisis deux colonnes différentes.", parent=dlg)
+                return
+            result["cols"] = (nv.get(), sv.get())
+            dlg.destroy()
+
+        def sample():
+            folder = pm_common.pick_folder("Où enregistrer le CSV exemple ?", parent=dlg)
+            if folder:
+                self._create_sample(folder)
+
+        btns = tk.Frame(body, bg=Theme.DARK_BG)
+        btns.pack(fill="x", pady=(16, 0))
+        for label, color, cmd, side in (("Utiliser ces colonnes", Theme.SUCCESS, ok, "right"),
+                                        ("Annuler", Theme.PANEL_BG, dlg.destroy, "right"),
+                                        ("Générer un CSV exemple…", Theme.PANEL_BG, sample, "left")):
+            tk.Button(btns, text=label, bg=color, fg="#0a0a10" if color != Theme.PANEL_BG else Theme.FG,
+                      relief="flat", bd=0, padx=14, pady=6, cursor="hand2", command=cmd
+                      ).pack(side=side, padx=(6, 0))
+        dlg.update_idletasks()
+        dlg.geometry(f"+{self.winfo_rootx() + 60}+{self.winfo_rooty() + 80}")
+        dlg.grab_set()
+        self.wait_window(dlg)
+        return result["cols"]
+
     # ---------------------------------------------------------------- Charger CSV
     def on_load_csv(self):
         if self.media_pool is None:
@@ -175,11 +350,23 @@ class CsvToTcWindow(PMWindow):
             self.log_write(self.log, f"[ERREUR] Fichier introuvable : {path}\n", "err")
             return
 
+        info = {}
         try:
-            self.csv_rows = read_csv_rows(path)
+            try:
+                self.csv_rows = read_csv_rows(path, info=info)
+            except ColumnsNotFound as e:
+                cols = self._ask_columns(e)
+                if not cols:
+                    self.log_write(self.log, "[INFO] Chargement annulé : colonnes non identifiées.\n", "warn")
+                    return
+                self.csv_rows = read_csv_rows(path, columns=cols, info=info)
+                info["auto"] = True
         except Exception as e:
             messagebox.showerror("Erreur de lecture CSV", str(e))
             return
+        if info.get("auto"):
+            self.log_write(self.log, f"Colonnes utilisées : '{info['name_col']}' → nom du clip, "
+                            f"'{info['start_col']}' → Start TC.\n", "dim")
 
         self.lbl_csv.config(text=os.path.basename(path))
         self.log_write(self.log, f"\nCSV chargé : {path} ({len(self.csv_rows)} lignes)\n", "dim")
@@ -195,9 +382,15 @@ class CsvToTcWindow(PMWindow):
     def _build_plan(self):
         self.tree.delete(*self.tree.get_children())
         self.plan = []
-        n_ok, n_dup, n_missing = 0, 0, 0
+        n_ok, n_dup, n_missing, n_fixed, n_bad = 0, 0, 0, 0, 0
 
-        for name, new_tc in self.csv_rows:
+        for name, raw_tc in self.csv_rows:
+            new_tc, tc_state, tc_note = normalize_tc(raw_tc)
+            if tc_state == "invalid":
+                self.tree.insert("", "end", values=(name, "-", raw_tc, f"TC invalide : {tc_note}"), tags=("fail",))
+                self.log_write(self.log, f"[TC INVALIDE] '{name}' — '{raw_tc}' : {tc_note}. Ligne ignorée.\n", "warn")
+                n_bad += 1
+                continue
             matches = self.name_index.get(name, [])
 
             if len(matches) == 0:
@@ -218,12 +411,17 @@ class CsvToTcWindow(PMWindow):
             except Exception:
                 old_tc = ""
 
-            self.tree.insert("", "end", values=(name, old_tc, new_tc, "Prêt"), tags=("ok",))
+            status = "Prêt"
+            if tc_state == "fixed":
+                status = f"Prêt — TC corrigé ('{raw_tc}' : {tc_note})"
+                self.log_write(self.log, f"[TC CORRIGÉ] '{name}' — '{raw_tc}' → '{new_tc}' ({tc_note}).\n", "warn")
+                n_fixed += 1
+            self.tree.insert("", "end", values=(name, old_tc, new_tc, status), tags=("ok",))
             self.plan.append({"clip": clip, "name": name, "old_tc": old_tc, "new_tc": new_tc})
             n_ok += 1
 
         self.log_write(self.log, f"\nRésumé preview : {n_ok} prêt(s), {n_dup} doublon(s) ignoré(s), "
-                        f"{n_missing} introuvable(s).\n", "accent")
+                        f"{n_missing} introuvable(s), {n_bad} TC invalide(s), {n_fixed} TC corrigé(s) automatiquement.\n", "accent")
         self.btn_apply.config(state="normal" if n_ok > 0 else "disabled")
 
     # ---------------------------------------------------------------- Apply

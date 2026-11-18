@@ -9,6 +9,8 @@ Colonnes reconnues (insensible à la casse, , ou ; comme délimiteur) :
   • VFX ID   : "VFX ID", "VFX_ID", "VFXID", "ID", "Name", "Nom", "Shot"
   • Record TC: "Record In", "Rec In", "Record TC", "Rec TC", "Record Start",
                "Start", "TC In", "Timecode"
+  • Notes (facultatif) : "Notes", "Commentaires", "Comments", "Remarques", "À faire"…
+    → description du marker timeline si l'option « Marker » est cochée
 
 MATCHING
 ─────────
@@ -55,6 +57,14 @@ ID_HEADERS = ("vfx id", "vfx_id", "vfxid", "vfx-id", "id", "name", "nom", "shot"
 TC_HEADERS = ("rec tc in", "record tc in", "record in", "rec in", "record_in", "rec_in", "record tc", "rec tc",
               "record start", "rec start", "start", "tc in", "tc_in", "timecode", "tc")
 
+NOTES_HEADERS = ("notes", "note", "commentaires", "commentaire", "comments", "comment",
+                 "remarques", "remarque", "à faire", "a faire", "travail", "to do", "todo")
+
+# Couleurs de markers Resolve (noms exacts attendus par Timeline.AddMarker)
+MARKER_COLORS = ["Blue", "Cyan", "Green", "Yellow", "Red", "Pink", "Purple", "Fuchsia",
+                 "Rose", "Lavender", "Sky", "Mint", "Lemon", "Sand", "Cocoa", "Cream"]
+MARKER_TAG = "PM-VFXID"     # customData : reconnaît nos markers pour les remplacer à la relance
+
 TC_RE = re.compile(r"^\s*(\d{1,2})[:;.](\d{2})[:;.](\d{2})[:;.](\d{2})\s*$")
 
 
@@ -89,20 +99,13 @@ def find_column(fieldnames, candidates):
 
 
 def read_text(path):
-    """Lit le fichier en UTF-8, sinon en MacRoman (export Excel Mac) puis cp1252 (Excel Windows)."""
-    with open(path, "rb") as f:
-        raw = f.read()
-    for enc in ("utf-8-sig", "mac_roman", "cp1252"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", errors="replace")
+    """Lit le CSV : UTF-16 (export Resolve), UTF-8, MacRoman (Excel Mac) puis cp1252 (Excel Windows)."""
+    return pm_common.read_text_file(path)
 
 
 def read_csv_rows(path):
     """
-    Retourne une liste de tuples (vfx_id, record_tc). L'en-tête est cherché dans
+    Retourne une liste de tuples (vfx_id, record_tc, note) (note = "" sans colonne de notes). L'en-tête est cherché dans
     les 15 premières lignes (les exports de breakdown ont souvent une ligne de
     titre au-dessus). Lève ValueError si les deux colonnes sont introuvables.
     """
@@ -117,6 +120,7 @@ def read_csv_rows(path):
         id_col = find_column(header, ID_HEADERS)
         tc_col = find_column(header, TC_HEADERS)
         if id_col is not None and tc_col is not None:
+            notes_col = find_column(header, [h for h in NOTES_HEADERS if h not in (_norm(header[id_col]), _norm(header[tc_col]))])
             break
     else:
         first = rows[1] if len(rows) > 1 else (rows[0] if rows else [])
@@ -130,9 +134,17 @@ def read_csv_rows(path):
     for row in rows[i + 1:]:
         vfx_id = row[id_col].strip() if id_col < len(row) else ""
         tc = row[tc_col].strip() if tc_col < len(row) else ""
+        note = row[notes_col].strip() if notes_col is not None and notes_col < len(row) else ""
         if vfx_id or tc:
-            out.append((vfx_id, tc))
+            out.append((vfx_id, tc, note))
     return out
+
+
+def marker_frame(item_start, item_end, timeline_start):
+    """Frame du marker timeline au milieu du clip. Timeline.AddMarker compte depuis le début
+    de la timeline (et non depuis 01:00:00:00), d'où la soustraction de timeline_start."""
+    mid = item_start + (item_end - item_start) // 2
+    return mid - timeline_start
 
 
 def match_item(frame, items):
@@ -191,13 +203,27 @@ class CsvToVfxIdWindow(PMWindow):
                         activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
                         font=Theme.FONT_SM, bd=0).pack(side="left", padx=(16, 0))
 
+        mk = tk.Frame(main, bg=Theme.DARK_BG)
+        mk.pack(fill="x", pady=(6, 0))
+        self.marker_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(mk, text="Ajouter Marker timeline",
+                        variable=self.marker_var,
+                        bg=Theme.DARK_BG, fg=Theme.FG, activebackground=Theme.DARK_BG,
+                        activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
+                        font=Theme.FONT_SM, bd=0).pack(side="left")
+        tk.Label(mk, text="Couleur :", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left", padx=(16, 6))
+        self.marker_color_var = tk.StringVar(value="Red")
+        ttk.Combobox(mk, textvariable=self.marker_color_var, width=10, state="readonly",
+                     values=MARKER_COLORS).pack(side="left")
+
         self.lbl_csv = tk.Label(main, text="Aucun CSV chargé", bg=Theme.DARK_BG, fg=Theme.FG)
         self.lbl_csv.pack(anchor="w", pady=(6, 0))
 
-        columns = ("vfx_id", "tc", "clip", "status")
+        columns = ("vfx_id", "tc", "clip", "note", "status")
         self.tree = ttk.Treeview(main, columns=columns, show="headings", height=14)
         for col, title, w in (("vfx_id", "VFX ID", 200), ("tc", "TC record", 120),
-                              ("clip", "Clip actuel", 280), ("status", "Statut", 260)):
+                              ("clip", "Clip actuel", 240), ("note", "Notes (CSV)", 220),
+                              ("status", "Statut", 260)):
             self.tree.heading(col, text=title)
             self.tree.column(col, width=w, anchor="w")
         self.tree.pack(fill="both", expand=True, pady=(10, 8))
@@ -288,10 +314,10 @@ class CsvToVfxIdWindow(PMWindow):
         used = {}   # id(item) -> vfx_id déjà assigné, pour détecter deux lignes sur un même clip
         n_ok = n_warn = n_bad = 0
 
-        for vfx_id, tc in self.csv_rows:
+        for vfx_id, tc, note in self.csv_rows:
             def bad(status):
                 nonlocal n_bad
-                self.tree.insert("", "end", values=(vfx_id, tc, "-", status), tags=("bad",))
+                self.tree.insert("", "end", values=(vfx_id, tc, "-", note, status), tags=("bad",))
                 self.log_write(self.log, f"[IGNORÉ] '{vfx_id}' @ {tc} — {status}\n", "warn")
                 n_bad += 1
 
@@ -327,8 +353,8 @@ class CsvToVfxIdWindow(PMWindow):
             else:
                 tag, status = "warn", "Prêt (TC à l'intérieur du clip)"
                 n_warn += 1
-            self.tree.insert("", "end", values=(vfx_id, tc, old, status), tags=(tag,))
-            self.plan.append({"item": item, "vfx_id": vfx_id, "tc": tc, "old": old})
+            self.tree.insert("", "end", values=(vfx_id, tc, old, note, status), tags=(tag,))
+            self.plan.append({"item": item, "vfx_id": vfx_id, "tc": tc, "old": old, "note": note})
 
         self.log_write(self.log, f"Preview : {n_ok} exact(s), {n_warn} à l'intérieur, "
                         f"{n_bad} ignoré(s).\n", "accent")
@@ -341,11 +367,15 @@ class CsvToVfxIdWindow(PMWindow):
         if not messagebox.askyesno(
             "Confirmer",
             f"Renommer {len(self.plan)} clip(s) de la timeline avec leur VFX ID ?\n"
-            "Les anciens noms seront consignés dans un log."
+            + (f"Un marker {self.marker_color_var.get()} sera ajouté au milieu de chaque clip.\n"
+               if self.marker_var.get() else "")
+            + "Les anciens noms seront consignés dans un log."
         ):
             return
 
-        n_ok = n_fail = 0
+        n_ok = n_fail = n_mk = n_mk_fail = 0
+        with_markers = self.marker_var.get()
+        color = self.marker_color_var.get()
         journal = []
         self.log_write(self.log, "\n── Application ──\n", "accent")
         for p in self.plan:
@@ -358,7 +388,18 @@ class CsvToVfxIdWindow(PMWindow):
             if confirmed == vfx_id:
                 n_ok += 1
                 self.log_write(self.log, f"[OK] {p['tc']}  '{p['old']}' → '{vfx_id}'\n", "ok")
-                self._mark_row(p, "ok", "Appliqué")
+                status = "Appliqué"
+                if with_markers:
+                    mk_state, mk_detail = self._add_marker(p, color)
+                    journal.append(f"{p['tc']}\tmarker {color}: {mk_state} {mk_detail}")
+                    if mk_state == "ok":
+                        n_mk += 1
+                        status += " + marker"
+                    else:
+                        n_mk_fail += 1
+                        status += " — marker NON posé"
+                        self.log_write(self.log, f"[ÉCHEC MARKER] '{vfx_id}' — {mk_detail}\n", "err")
+                self._mark_row(p, "ok", status)
             else:
                 n_fail += 1
                 self.log_write(self.log, f"[ÉCHEC] {p['tc']} — lu '{confirmed}', attendu '{vfx_id}'\n", "err")
@@ -370,14 +411,38 @@ class CsvToVfxIdWindow(PMWindow):
             self.log_write(self.log, f"\nJournal : {log_path}\n", "dim")
         except OSError as e:
             self.log_write(self.log, f"\n[INFO] Journal non écrit ({e}).\n", "dim")
-        self.log_write(self.log, f"Terminé : {n_ok} succès, {n_fail} échec(s).\n", "accent")
-        messagebox.showinfo("Terminé", f"{n_ok} clip(s) renommé(s).\n{n_fail} échec(s) — voir le log.")
+        extra = ""
+        if with_markers:
+            extra = f"\n{n_mk} marker(s) posé(s)" + (f", {n_mk_fail} en échec" if n_mk_fail else "")
+        self.log_write(self.log, f"Terminé : {n_ok} succès, {n_fail} échec(s).{extra.replace(chr(10), ' ')}\n", "accent")
+        messagebox.showinfo("Terminé", f"{n_ok} clip(s) renommé(s).\n{n_fail} échec(s){extra} — voir le log.")
+
+    def _add_marker(self, p, color):
+        """Pose (ou remplace, si c'est un des nôtres) un marker au milieu du clip.
+        Retourne ("ok"|"fail", détail). Le résultat est relu via GetMarkers()."""
+        item, vfx_id, note = p["item"], p["vfx_id"], p["note"]
+        try:
+            frame = marker_frame(int(item.GetStart()), int(item.GetEnd()),
+                                 int(self.timeline.GetStartFrame()))
+            existing = (self.timeline.GetMarkers() or {}).get(frame)
+            if existing:
+                if existing.get("customData") != MARKER_TAG:
+                    return "fail", f"un autre marker existe déjà au frame {frame} (laissé intact)"
+                self.timeline.DeleteMarkerAtFrame(frame)       # relance : on remplace le nôtre
+            self.timeline.AddMarker(frame, color, vfx_id, note, 1, MARKER_TAG)
+            got = (self.timeline.GetMarkers() or {}).get(frame)
+        except Exception as e:
+            return "fail", f"exception : {e}"
+        if got and got.get("name") == vfx_id:
+            return "ok", f"frame {frame}"
+        found = sorted((self.timeline.GetMarkers() or {}).keys())[:5]
+        return "fail", f"marker non retrouvé au frame {frame} (frames présents : {found})"
 
     def _mark_row(self, plan_item, tag, status):
         for iid in self.tree.get_children():
             v = self.tree.item(iid, "values")
             if v[0] == plan_item["vfx_id"] and v[1] == plan_item["tc"]:
-                self.tree.item(iid, values=(v[0], v[1], v[2], status), tags=(tag,))
+                self.tree.item(iid, values=(v[0], v[1], v[2], v[3], status), tags=(tag,))
                 break
 
 

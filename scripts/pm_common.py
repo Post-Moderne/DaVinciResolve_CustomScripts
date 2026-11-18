@@ -139,6 +139,27 @@ def get_resolve_objects():
 LOG_ROOT = os.path.join(REAL_HOME, "Logs", "PM-Suite")
 
 
+def decode_text_bytes(raw):
+    """
+    Décode les octets d'un fichier texte (CSV…) en détectant l'encodage :
+    UTF-16 (BOM LE/BE — export de métadonnées Resolve), UTF-8 (avec ou sans BOM),
+    puis MacRoman (Excel Mac) et cp1252 (Excel Windows) en dernier recours.
+    """
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")                       # le BOM fixe l'endianness et est retiré
+    for enc in ("utf-8-sig", "mac_roman", "cp1252"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def read_text_file(path):
+    with open(path, "rb") as f:
+        return decode_text_bytes(f.read())
+
+
 def write_log(tool_name, lines):
     """
     Écrit `lines` (liste de str) dans un fichier horodaté sous
