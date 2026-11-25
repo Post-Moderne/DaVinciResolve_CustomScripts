@@ -38,6 +38,23 @@ for f in PM-Suite.py pm_common.py pm_update.py VERSION pm_tools/__init__.py; do
 done
 VERSION="$(tr -d '[:space:]' < "$SRC/VERSION")"
 
+# ── Module API de Resolve ──────────────────────────────────────────────────────
+# Resolve ne le dépose pas toujours dans Modules (vu sur App Store) : s'il manque, on
+# le copie depuis l'application. Un fichier existant n'est jamais remplacé.
+add_resolve_module() {  # $1 = dossier Modules, $2 = sudo éventuel
+  local DEST="$1/DaVinciResolveScript.py" APPS="${PM_APPS_DIR:-/Applications}" F FOUND_SRC=""
+  [ -f "$DEST" ] && return 0
+  for F in "$APPS"/"DaVinci Resolve"*.app/Contents/Resources/Developer/Scripting/Modules/DaVinciResolveScript.py \
+           "$APPS/DaVinci Resolve/DaVinci Resolve.app/Contents/Resources/Developer/Scripting/Modules/DaVinciResolveScript.py"; do
+    [ -f "$F" ] && FOUND_SRC="$F"          # glob trié : la version la plus récente gagne
+  done
+  if [ -n "$FOUND_SRC" ] && $2 cp "$FOUND_SRC" "$DEST"; then
+    echo "  ✓ DaVinciResolveScript.py ajouté (depuis $FOUND_SRC)"
+  else
+    echo "  ⚠ DaVinciResolveScript.py absent et non copié (application Resolve introuvable ?)"
+  fi
+}
+
 # ── Copie (sudo uniquement si le dossier n'est pas modifiable) ─────────────────
 install_to() {  # $1 = dossier Scripts Fusion, $2 = dossier Modules
   local UTIL="$1/Utility" MODS="$2" SUDO=""
@@ -50,6 +67,7 @@ install_to() {  # $1 = dossier Scripts Fusion, $2 = dossier Modules
   $SUDO cp -R "$SRC/pm_tools" "$MODS/pm_tools" || return 1
   $SUDO find "$MODS/pm_tools" \( -name '__pycache__' -o -name '.DS_Store' \) -prune -exec rm -rf {} + 2>/dev/null
   cp "$SRC/PM-Suite.py" "$UTIL/PM-Suite.py" || return 1
+  add_resolve_module "$MODS" "$SUDO"
   echo "  ✓ installé"
 }
 

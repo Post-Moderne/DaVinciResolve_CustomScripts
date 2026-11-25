@@ -12,6 +12,7 @@ copié à côté de PM-Suite.py dans le même dossier Scripts/Utility pour
 que les imports fonctionnent.
 """
 
+import glob
 import os
 import sys
 import tkinter as tk
@@ -93,6 +94,60 @@ def get_version():
         return "0.0.0-dev"
 
 
+# Applications Resolve : chacune embarque DaVinciResolveScript.py et fusionscript.so.
+APP_PATTERNS = ["/Applications/DaVinci Resolve*.app",
+                "/Applications/DaVinci Resolve/DaVinci Resolve.app"]
+
+
+def bundled_scripting_apps():
+    """
+    Retourne [(dossier Modules, chemin de fusionscript.so), ...] pour les apps Resolve
+    qui contiennent DaVinciResolveScript.py, la version la plus récente (par nom) en premier.
+    """
+    apps = sorted({a for pattern in APP_PATTERNS for a in glob.glob(pattern)}, reverse=True)
+    found = []
+    for app in apps:
+        modules = os.path.join(app, "Contents/Resources/Developer/Scripting/Modules")
+        if os.path.isfile(os.path.join(modules, "DaVinciResolveScript.py")):
+            found.append((modules, os.path.join(app, "Contents/Libraries/Fusion/fusionscript.so")))
+    return found
+
+
+def import_resolve_script():
+    """
+    Importe DaVinciResolveScript. Resolve (surtout App Store) ne le dépose pas toujours
+    dans le dossier Modules : en dernier recours, on le prend dans l'application elle-même.
+    Lève RuntimeError avec la cause réelle.
+    """
+    try:
+        import DaVinciResolveScript as dvr
+        return dvr
+    except ImportError as e:
+        error = e
+
+    for modules, library in bundled_scripting_apps():
+        if modules not in sys.path:
+            sys.path.append(modules)       # en queue : le dossier Modules reste prioritaire
+        # Le chemin par défaut du module ne couvre pas les apps renommées (« … Studio 21.app »).
+        had_lib = "RESOLVE_SCRIPT_LIB" in os.environ
+        if not had_lib and os.path.isfile(library):
+            os.environ["RESOLVE_SCRIPT_LIB"] = library
+        try:
+            import DaVinciResolveScript as dvr
+            return dvr
+        except ImportError as e:
+            error = e
+            if not had_lib:
+                os.environ.pop("RESOLVE_SCRIPT_LIB", None)
+
+    raise RuntimeError(
+        "Le module DaVinciResolveScript n'a pas pu être chargé.\n"
+        f"Cause : {error}\n\n"
+        "Lance ce script depuis Workspace > Scripts dans DaVinci Resolve. "
+        "Si c'est déjà le cas, relance Install-PM-Suite.command."
+    )
+
+
 def get_resolve_objects():
     """
     Retourne (resolve, project, media_pool) ou lève RuntimeError.
@@ -112,13 +167,7 @@ def get_resolve_objects():
         if p not in sys.path:
             sys.path.insert(0, p)
 
-    try:
-        import DaVinciResolveScript as dvr
-    except ImportError:
-        raise RuntimeError(
-            "Le module DaVinciResolveScript est introuvable.\n"
-            "Lance ce script depuis Workspace > Scripts dans DaVinci Resolve."
-        )
+    dvr = import_resolve_script()
 
     resolve = dvr.scriptapp("Resolve")
     if not resolve:
