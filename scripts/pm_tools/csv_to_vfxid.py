@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CSV → VFX ID — charge un .csv (VFX ID + timecode record) et renomme les clips
-de la timeline active dont le point d'entrée correspond au timecode record.
+CSV → VFX ID — charge un .csv (VFX ID + timecode record) puis, au choix,
+renomme les clips de la timeline active dont le point d'entrée correspond au
+timecode record et/ou pose des markers timeline.
 Module interne de la PM Suite (voir PM-Suite.py).
 
 Colonnes reconnues (insensible à la casse, , ou ; comme délimiteur) :
@@ -18,6 +19,9 @@ Le TC record du CSV est converti en frames (DF/NDF et cadence lus sur la
 timeline) puis comparé à TimelineItem.GetStart(). Un clip dont le début tombe
 exactement sur le TC est prioritaire ; à défaut, on accepte (avec avertissement)
 un clip qui *contient* le TC — cas d'un TC pris au milieu d'un plan.
+
+Sans l'option « Renommer les clips », aucun clip n'est cherché : chaque marker
+est posé exactement au TC du CSV, qu'il y ait un clip dessous ou non.
 
 NOTE
 ─────
@@ -63,6 +67,7 @@ NOTES_HEADERS = ("notes", "note", "commentaires", "commentaire", "comments", "co
 # Couleurs de markers Resolve (noms exacts attendus par Timeline.AddMarker)
 MARKER_COLORS = ["Blue", "Cyan", "Green", "Yellow", "Red", "Pink", "Purple", "Fuchsia",
                  "Rose", "Lavender", "Sky", "Mint", "Lemon", "Sand", "Cocoa", "Cream"]
+MARKER_POSITIONS = ["Début", "Milieu", "Fin"]     # position du marker sur le clip renommé
 MARKER_TAG = "PM-VFXID"     # customData : reconnaît nos markers pour les remplacer à la relance
 
 TC_RE = re.compile(r"^\s*(\d{1,2})[:;.](\d{2})[:;.](\d{2})[:;.](\d{2})\s*$")
@@ -176,11 +181,30 @@ def read_csv_rows(path):
     return out
 
 
-def marker_frame(item_start, item_end, timeline_start):
-    """Frame du marker timeline au milieu du clip. Timeline.AddMarker compte depuis le début
-    de la timeline (et non depuis 01:00:00:00), d'où la soustraction de timeline_start."""
-    mid = item_start + (item_end - item_start) // 2
-    return mid - timeline_start
+def marker_frame(item_start, item_end, timeline_start, position="Milieu"):
+    """Frame du marker timeline au début, au milieu ou à la fin (dernière image) du clip ;
+    item_end est exclusif. Timeline.AddMarker compte depuis le début de la timeline (et non
+    depuis 01:00:00:00), d'où la soustraction de timeline_start."""
+    if position == "Début":
+        frame = item_start
+    elif position == "Fin":
+        frame = max(item_start, item_end - 1)
+    else:
+        frame = item_start + (item_end - item_start) // 2
+    return frame - timeline_start
+
+
+def marker_only_frame(frame, timeline_start, used):
+    """
+    Frame du marker timeline posé directement au TC (sans clip). used : {frame: vfx_id} déjà
+    planifiés (Resolve n'accepte qu'un marker par frame). Lève ValueError si impossible.
+    """
+    rel = frame - timeline_start
+    if rel < 0:
+        raise ValueError("TC avant le début de la timeline")
+    if rel in used:
+        raise ValueError(f"Même TC que '{used[rel]}'")
+    return rel
 
 
 def match_item(frame, items):
@@ -206,6 +230,8 @@ class CsvToVfxIdWindow(PMWindow):
         self.csv_rows = []
         self.plan = []
         self.timeline = None
+        self.trace = pm_common.Trace.__new__(pm_common.Trace)   # inactif tant qu'aucun chargement
+        self.trace._f = None
         super().__init__(master, "CSV → VFX ID",
                           f"DaVinci Resolve  ·  {pm_common.RESOLVE_VARIANT}")
         self._init_resolve()
@@ -227,6 +253,12 @@ class CsvToVfxIdWindow(PMWindow):
 
         opts = tk.Frame(main, bg=Theme.DARK_BG)
         opts.pack(fill="x", pady=(8, 0))
+        self.rename_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(opts, text="Renommer les clips",
+                        variable=self.rename_var, command=self._on_mode_change,
+                        bg=Theme.DARK_BG, fg=Theme.FG, activebackground=Theme.DARK_BG,
+                        activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
+                        font=Theme.FONT_SM, bd=0).pack(side="left", padx=(0, 16))
         tk.Label(opts, text="Piste vidéo :", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
         self.track_var = tk.StringVar(value="V1")
         self.cmb_track = ttk.Combobox(opts, textvariable=self.track_var, width=8, state="readonly",
@@ -234,17 +266,18 @@ class CsvToVfxIdWindow(PMWindow):
         self.cmb_track.pack(side="left", padx=6)
         self.cmb_track.bind("<<ComboboxSelected>>", lambda e: self._rebuild_plan())
         self.inside_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opts, text="Accepter un TC à l'intérieur d'un clip",
+        self.chk_inside = tk.Checkbutton(opts, text="Accepter un TC à l'intérieur d'un clip",
                         variable=self.inside_var, command=self._rebuild_plan,
                         bg=Theme.DARK_BG, fg=Theme.FG, activebackground=Theme.DARK_BG,
                         activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
-                        font=Theme.FONT_SM, bd=0).pack(side="left", padx=(16, 0))
+                        font=Theme.FONT_SM, bd=0)
+        self.chk_inside.pack(side="left", padx=(16, 0))
 
         mk = tk.Frame(main, bg=Theme.DARK_BG)
         mk.pack(fill="x", pady=(6, 0))
         self.marker_var = tk.BooleanVar(value=True)
         tk.Checkbutton(mk, text="Ajouter Marker timeline",
-                        variable=self.marker_var,
+                        variable=self.marker_var, command=self._on_mode_change,
                         bg=Theme.DARK_BG, fg=Theme.FG, activebackground=Theme.DARK_BG,
                         activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
                         font=Theme.FONT_SM, bd=0).pack(side="left")
@@ -252,6 +285,11 @@ class CsvToVfxIdWindow(PMWindow):
         self.marker_color_var = tk.StringVar(value="Red")
         ttk.Combobox(mk, textvariable=self.marker_color_var, width=10, state="readonly",
                      values=MARKER_COLORS).pack(side="left")
+        tk.Label(mk, text="Position sur le clip :", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left", padx=(16, 6))
+        self.marker_pos_var = tk.StringVar(value="Début")
+        self.cmb_marker_pos = ttk.Combobox(mk, textvariable=self.marker_pos_var, width=8,
+                                           state="readonly", values=MARKER_POSITIONS)
+        self.cmb_marker_pos.pack(side="left")
 
         self.lbl_csv = tk.Label(main, text="Aucun CSV chargé", bg=Theme.DARK_BG, fg=Theme.FG)
         self.lbl_csv.pack(anchor="w", pady=(6, 0))
@@ -283,7 +321,9 @@ class CsvToVfxIdWindow(PMWindow):
 
     def _refresh_timeline(self):
         """Relit la timeline active, sa cadence/DF et la liste des pistes vidéo."""
+        self.trace.step("API : GetCurrentTimeline")
         self.timeline = self.project.GetCurrentTimeline() if self.project else None
+        self.trace.step("API : timeline obtenue")
         if not self.timeline:
             self.log_write(self.log, "[ERREUR] Aucune timeline active.\n", "err")
             return False
@@ -292,7 +332,9 @@ class CsvToVfxIdWindow(PMWindow):
         except (TypeError, ValueError):
             self.fps = 24.0
         self.drop_frame = str(self.timeline.GetSetting("timelineDropFrameTimecode")) == "1"
+        self.trace.step("API : réglages de la timeline lus")
         n = int(self.timeline.GetTrackCount("video") or 1)
+        self.trace.step(f"API : {n} piste(s) vidéo")
         self.cmb_track.config(values=["Toutes"] + [f"V{i}" for i in range(1, n + 1)])
         if self.track_var.get() not in self.cmb_track["values"]:
             self.track_var.set("V1")
@@ -307,8 +349,12 @@ class CsvToVfxIdWindow(PMWindow):
         tracks = range(1, n + 1) if sel == "Toutes" else [int(sel[1:])]
         out = []
         for t in tracks:
-            for it in (self.timeline.GetItemListInTrack("video", t) or []):
+            self.trace.step(f"piste V{t} : lecture des clips")
+            lst = self.timeline.GetItemListInTrack("video", t) or []
+            self.trace.step(f"piste V{t} : {len(lst)} clip(s), lecture des positions")
+            for it in lst:
                 out.append((it, int(it.GetStart()), int(it.GetEnd())))
+        self.trace.step(f"{len(out)} clip(s) indexés")
         return out
 
     # ---------------------------------------------------------------- CSV
@@ -344,33 +390,76 @@ class CsvToVfxIdWindow(PMWindow):
         if not os.path.isfile(path):
             messagebox.showerror("Fichier introuvable", f"Aucun fichier à ce chemin :\n{path}")
             return
+        # Trace + affichage immédiat : si Resolve fige, le fichier de trace dit à quelle étape.
+        self.trace = pm_common.Trace(TOOL_NAME)
+        self.lbl_csv.config(text=f"Chargement de {os.path.basename(path)}…")
+        self.log_write(self.log, f"\nChargement : {path}\n", "dim")
+        self.update_idletasks()
         try:
-            self.csv_rows = read_csv_rows(path)
-        except ColumnsNotFound as e:
-            if messagebox.askyesno("Colonnes introuvables", f"{e}\n\nCréer un CSV exemple maintenant ?"):
-                self.on_sample_csv()
-            return
+            self.trace.step(f"lecture du CSV : {path} ({os.path.getsize(path)} octets)")
+            try:
+                self.csv_rows = read_csv_rows(path)
+            except ColumnsNotFound as e:
+                self.trace.step("colonnes introuvables → dialogue")
+                self.trace.close()
+                self.lbl_csv.config(text="Aucun CSV chargé")
+                if messagebox.askyesno("Colonnes introuvables", f"{e}\n\nCréer un CSV exemple maintenant ?"):
+                    self.on_sample_csv()
+                return
+            except Exception as e:
+                self.trace.step(f"erreur de lecture : {e!r}")
+                self.trace.close(keep=True)
+                self.lbl_csv.config(text="Aucun CSV chargé")
+                messagebox.showerror("Erreur de lecture CSV", str(e))
+                return
+            self.trace.step(f"CSV lu : {len(self.csv_rows)} lignes")
+            if not self._refresh_timeline():
+                self.trace.close()
+                self.lbl_csv.config(text="Aucun CSV chargé")
+                messagebox.showerror("Erreur", "Ouvre d'abord une timeline dans Resolve.")
+                return
+            self.trace.step("timeline lue")
+            self.lbl_csv.config(text=os.path.basename(path))
+            self.log_write(self.log, f"CSV chargé : {path} ({len(self.csv_rows)} lignes)\n", "dim")
+            self._rebuild_plan()
+            self.trace.step("terminé")
+            self.trace.close()
         except Exception as e:
-            messagebox.showerror("Erreur de lecture CSV", str(e))
-            return
-        if not self._refresh_timeline():
-            messagebox.showerror("Erreur", "Ouvre d'abord une timeline dans Resolve.")
-            return
-        self.lbl_csv.config(text=os.path.basename(path))
-        self.log_write(self.log, f"\nCSV chargé : {path} ({len(self.csv_rows)} lignes)\n", "dim")
-        self._rebuild_plan()
+            self.trace.step(f"EXCEPTION : {e!r}")
+            self.trace.close(keep=True)
+            pm_common.write_error_log(TOOL_NAME, e)
+            raise
 
     # ---------------------------------------------------------------- Plan
+    def _on_mode_change(self):
+        """Les options de recherche de clip n'ont de sens que si on renomme."""
+        renaming = self.rename_var.get()
+        self.cmb_track.config(state="readonly" if renaming else "disabled")
+        self.chk_inside.config(state="normal" if renaming else "disabled")
+        self.cmb_marker_pos.config(state="readonly" if renaming and self.marker_var.get() else "disabled")
+        self._rebuild_plan()
+
     def _rebuild_plan(self):
         if not self.csv_rows or not self.timeline:
             return
         self.tree.delete(*self.tree.get_children())
         self.plan = []
-        items = self._track_items()
-        used = {}   # id(item) -> vfx_id déjà assigné, pour détecter deux lignes sur un même clip
+        renaming = self.rename_var.get()
+        if not renaming and not self.marker_var.get():
+            self.log_write(self.log, "[INFO] Coche « Renommer les clips » et/ou « Ajouter Marker "
+                            "timeline ».\n", "warn")
+            self.btn_apply.config(state="disabled")
+            return
+        if renaming:
+            items = self._track_items()
+        else:
+            timeline_start = int(self.timeline.GetStartFrame())
+        used = {}   # id(item) ou frame du marker -> vfx_id, pour détecter deux lignes au même endroit
         n_ok = n_warn = n_bad = 0
 
-        for vfx_id, tc, note in self.csv_rows:
+        for n_row, (vfx_id, tc, note) in enumerate(self.csv_rows, 1):
+            if n_row % 50 == 0:
+                self.trace.step(f"plan : ligne {n_row}/{len(self.csv_rows)}")
             def bad(status):
                 nonlocal n_bad
                 self.tree.insert("", "end", values=(vfx_id, tc, "-", note, status), tags=("bad",))
@@ -384,6 +473,19 @@ class CsvToVfxIdWindow(PMWindow):
                 frame = tc_to_frames(tc, self.fps, self.drop_frame)
             except ValueError as e:
                 bad(str(e))
+                continue
+
+            if not renaming:
+                try:
+                    rel = marker_only_frame(frame, timeline_start, used)
+                except ValueError as e:
+                    bad(str(e))
+                    continue
+                used[rel] = vfx_id
+                self.tree.insert("", "end", values=(vfx_id, tc, "-", note, "Prêt (marker)"), tags=("ok",))
+                self.plan.append({"item": None, "frame": rel, "vfx_id": vfx_id, "tc": tc,
+                                  "old": "", "note": note})
+                n_ok += 1
                 continue
 
             matches, mode = match_item(frame, items)
@@ -412,74 +514,91 @@ class CsvToVfxIdWindow(PMWindow):
             self.tree.insert("", "end", values=(vfx_id, tc, old, note, status), tags=(tag,))
             self.plan.append({"item": item, "vfx_id": vfx_id, "tc": tc, "old": old, "note": note})
 
-        self.log_write(self.log, f"Preview : {n_ok} exact(s), {n_warn} à l'intérieur, "
-                        f"{n_bad} ignoré(s).\n", "accent")
+        summary = (f"{n_ok} exact(s), {n_warn} à l'intérieur" if renaming
+                   else f"{n_ok} marker(s) à poser")
+        self.log_write(self.log, f"Preview : {summary}, {n_bad} ignoré(s).\n", "accent")
         self.btn_apply.config(state="normal" if self.plan else "disabled")
 
     # ---------------------------------------------------------------- Apply
     def on_apply(self):
         if not self.plan:
             return
-        if not messagebox.askyesno(
-            "Confirmer",
-            f"Renommer {len(self.plan)} clip(s) de la timeline avec leur VFX ID ?\n"
-            + (f"Un marker {self.marker_color_var.get()} sera ajouté au milieu de chaque clip.\n"
-               if self.marker_var.get() else "")
-            + "Les anciens noms seront consignés dans un log."
-        ):
+        renaming = self.rename_var.get()
+        with_markers = self.marker_var.get()
+        color = self.marker_color_var.get()
+        if renaming:
+            question = f"Renommer {len(self.plan)} clip(s) de la timeline avec leur VFX ID ?\n"
+            if with_markers:
+                question += (f"Un marker {color} sera ajouté sur chaque clip "
+                             f"(position : {self.marker_pos_var.get().lower()}).\n")
+            question += "Les anciens noms seront consignés dans un log."
+        else:
+            question = (f"Ajouter {len(self.plan)} marker(s) {color} à la timeline, au TC du CSV ?\n"
+                        "Aucun clip ne sera renommé.")
+        if not messagebox.askyesno("Confirmer", question):
             return
 
         n_ok = n_fail = n_mk = n_mk_fail = 0
-        with_markers = self.marker_var.get()
-        color = self.marker_color_var.get()
         journal = []
         self.log_write(self.log, "\n── Application ──\n", "accent")
         for p in self.plan:
             item, vfx_id = p["item"], p["vfx_id"]
-            try:
-                item.SetName(vfx_id)
-                confirmed = item.GetName() or ""
-            except Exception as e:
-                confirmed = f"<exception : {e}>"
-            if confirmed == vfx_id:
+            status = ""
+            if renaming:
+                try:
+                    item.SetName(vfx_id)
+                    confirmed = item.GetName() or ""
+                except Exception as e:
+                    confirmed = f"<exception : {e}>"
+                journal.append(f"{p['tc']}\t'{p['old']}' -> '{vfx_id}'\t{'OK' if confirmed == vfx_id else 'ECHEC'}")
+                if confirmed != vfx_id:
+                    n_fail += 1
+                    self.log_write(self.log, f"[ÉCHEC] {p['tc']} — lu '{confirmed}', attendu '{vfx_id}'\n", "err")
+                    self._mark_row(p, "bad", f"Non appliqué (lu : {confirmed or 'vide'})")
+                    continue
                 n_ok += 1
                 self.log_write(self.log, f"[OK] {p['tc']}  '{p['old']}' → '{vfx_id}'\n", "ok")
                 status = "Appliqué"
-                if with_markers:
-                    mk_state, mk_detail = self._add_marker(p, color)
-                    journal.append(f"{p['tc']}\tmarker {color}: {mk_state} {mk_detail}")
-                    if mk_state == "ok":
-                        n_mk += 1
-                        status += " + marker"
-                    else:
-                        n_mk_fail += 1
-                        status += " — marker NON posé"
-                        self.log_write(self.log, f"[ÉCHEC MARKER] '{vfx_id}' — {mk_detail}\n", "err")
-                self._mark_row(p, "ok", status)
-            else:
-                n_fail += 1
-                self.log_write(self.log, f"[ÉCHEC] {p['tc']} — lu '{confirmed}', attendu '{vfx_id}'\n", "err")
-                self._mark_row(p, "bad", f"Non appliqué (lu : {confirmed or 'vide'})")
-            journal.append(f"{p['tc']}\t'{p['old']}' -> '{vfx_id}'\t{'OK' if confirmed == vfx_id else 'ECHEC'}")
+            tag = "ok"
+            if with_markers:
+                mk_state, mk_detail = self._add_marker(p, color)
+                journal.append(f"{p['tc']}\t'{vfx_id}'\tmarker {color}: {mk_state} {mk_detail}")
+                if mk_state == "ok":
+                    n_mk += 1
+                    status = f"{status} + marker" if renaming else "Marker posé"
+                    if not renaming:
+                        self.log_write(self.log, f"[OK] {p['tc']}  marker '{vfx_id}'\n", "ok")
+                else:
+                    n_mk_fail += 1
+                    status = f"{status} — marker NON posé" if renaming else "Marker NON posé"
+                    tag = "ok" if renaming else "bad"
+                    self.log_write(self.log, f"[ÉCHEC MARKER] '{vfx_id}' — {mk_detail}\n", "err")
+            self._mark_row(p, tag, status)
 
         try:
             log_path = pm_common.write_log(TOOL_NAME, [f"Timeline : {self.timeline.GetName()}"] + journal)
             self.log_write(self.log, f"\nJournal : {log_path}\n", "dim")
         except OSError as e:
             self.log_write(self.log, f"\n[INFO] Journal non écrit ({e}).\n", "dim")
-        extra = ""
+        results = []
+        if renaming:
+            results.append(f"{n_ok} clip(s) renommé(s), {n_fail} échec(s)")
         if with_markers:
-            extra = f"\n{n_mk} marker(s) posé(s)" + (f", {n_mk_fail} en échec" if n_mk_fail else "")
-        self.log_write(self.log, f"Terminé : {n_ok} succès, {n_fail} échec(s).{extra.replace(chr(10), ' ')}\n", "accent")
-        messagebox.showinfo("Terminé", f"{n_ok} clip(s) renommé(s).\n{n_fail} échec(s){extra} — voir le log.")
+            results.append(f"{n_mk} marker(s) posé(s), {n_mk_fail} échec(s)")
+        self.log_write(self.log, f"Terminé : {' · '.join(results)}.\n", "accent")
+        messagebox.showinfo("Terminé", "\n".join(results) + "\n\nDétails dans le log.")
 
     def _add_marker(self, p, color):
-        """Pose (ou remplace, si c'est un des nôtres) un marker au milieu du clip.
+        """Pose (ou remplace, si c'est un des nôtres) un marker sur le clip (début, milieu ou fin),
+        ou directement au frame planifié s'il n'y a pas de clip (p["item"] is None).
         Retourne ("ok"|"fail", détail). Le résultat est relu via GetMarkers()."""
         item, vfx_id, note = p["item"], p["vfx_id"], p["note"]
         try:
-            frame = marker_frame(int(item.GetStart()), int(item.GetEnd()),
-                                 int(self.timeline.GetStartFrame()))
+            if item is None:
+                frame = p["frame"]
+            else:
+                frame = marker_frame(int(item.GetStart()), int(item.GetEnd()),
+                                     int(self.timeline.GetStartFrame()), self.marker_pos_var.get())
             existing = (self.timeline.GetMarkers() or {}).get(frame)
             if existing:
                 if existing.get("customData") != MARKER_TAG:

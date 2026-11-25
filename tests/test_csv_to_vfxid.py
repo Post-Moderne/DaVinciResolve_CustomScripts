@@ -70,8 +70,31 @@ class MarkerFrameTests(unittest.TestCase):
     def test_first_clip_odd_length(self):
         self.assertEqual(v.marker_frame(86400, 86400 + 25, 86400), 12)
 
+    def test_positions(self):
+        self.assertEqual(v.marker_frame(86500, 86600, 86400, "Début"), 100)
+        self.assertEqual(v.marker_frame(86500, 86600, 86400, "Milieu"), 150)
+        self.assertEqual(v.marker_frame(86500, 86600, 86400, "Fin"), 199)   # end exclusif
+
+    def test_end_of_one_frame_clip(self):
+        self.assertEqual(v.marker_frame(86500, 86501, 86400, "Fin"), 100)
+
     def test_colors_include_defaults(self):
         self.assertIn("Blue", v.MARKER_COLORS)
+
+
+class MarkerOnlyTests(unittest.TestCase):
+    def test_marker_at_tc(self):
+        self.assertEqual(v.marker_only_frame(86400 + 120, 86400, {}), 120)
+        self.assertEqual(v.marker_only_frame(86400, 86400, {}), 0)
+
+    def test_before_timeline_start(self):
+        with self.assertRaises(ValueError):
+            v.marker_only_frame(86399, 86400, {})
+
+    def test_duplicate_tc(self):
+        with self.assertRaises(ValueError) as cm:
+            v.marker_only_frame(86410, 86400, {10: "VFX_010"})
+        self.assertIn("VFX_010", str(cm.exception))
 
 
 if __name__ == "__main__":

@@ -184,6 +184,60 @@ def write_error_log(tool_name, exc):
     return write_log(tool_name, lines)
 
 
+class Trace:
+    """
+    Trace de diagnostic pour une opération qui peut geler l'interface (beachball).
+    Chaque étape est écrite et synchronisée sur disque immédiatement : si Resolve fige,
+    la dernière ligne du fichier dit où. Un « watchdog » (faulthandler) y ajoute aussi la
+    pile d'appels de tous les threads si l'opération dépasse `watchdog_s` secondes.
+    Le fichier est supprimé à la fin normale (close()) : il ne reste que les cas anormaux,
+    dans ~/Logs/PM-Suite/<tool_name>/trace_<horodatage>.log.
+    """
+
+    def __init__(self, tool_name, watchdog_s=15):
+        import time
+        self._t0 = time.perf_counter()
+        self._time = time
+        self.path = None
+        self._f = None
+        try:
+            log_dir = os.path.join(LOG_ROOT, tool_name)
+            os.makedirs(log_dir, exist_ok=True)
+            self.path = os.path.join(log_dir, f"trace_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.log")
+            self._f = open(self.path, "w", encoding="utf-8")
+            self._f.write(f"{tool_name} — trace — PM Suite v{get_version()} — "
+                          f"Python {sys.version.split()[0]} — variante {RESOLVE_VARIANT}\n")
+            self._f.flush()
+            import faulthandler
+            faulthandler.dump_traceback_later(watchdog_s, repeat=True, file=self._f)
+        except Exception:
+            pass        # le diagnostic ne doit jamais empêcher l'outil de fonctionner
+
+    def step(self, msg):
+        if not self._f:
+            return
+        try:
+            self._f.write(f"[{self._time.perf_counter() - self._t0:7.2f}s] {msg}\n")
+            self._f.flush()
+            os.fsync(self._f.fileno())
+        except Exception:
+            pass
+
+    def close(self, keep=False):
+        """Fin normale : arrête le watchdog et supprime le fichier (sauf keep=True)."""
+        if not self._f:
+            return
+        try:
+            import faulthandler
+            faulthandler.cancel_dump_traceback_later()
+            self._f.close()
+            if not keep:
+                os.remove(self.path)
+        except Exception:
+            pass
+        self._f = None
+
+
 # ---------------------------------------------------------------------------
 # Thème d'interface partagé
 # ---------------------------------------------------------------------------
