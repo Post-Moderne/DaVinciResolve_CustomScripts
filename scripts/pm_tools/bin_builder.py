@@ -15,6 +15,7 @@ from tkinter import ttk, messagebox
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pm_common
 from pm_common import PMWindow, Theme
+from pm_tools.i18n import tr
 
 TOOL_NAME = "PM-BinBuilder"
 
@@ -65,8 +66,8 @@ def parser_liste_indentee(texte):
         niveau_max_autorise = pile[-1][0] + 1
         if niveau > niveau_max_autorise:
             raise ValueError(
-                f"Ligne {numero_ligne} ('{nom}') : indentation incohérente "
-                f"(saut de niveau non autorisé)."
+                tr("Ligne {0} ('{1}') : indentation incohérente (saut de niveau non autorisé).",
+                   numero_ligne, nom)
             )
 
         while pile and pile[-1][0] >= niveau:
@@ -128,11 +129,12 @@ def creer_bins(media_pool, dossier_parent_resolve, arbre, journal):
     for node in arbre:
         nouveau_bin = media_pool.AddSubFolder(dossier_parent_resolve, node.name)
         if nouveau_bin:
-            journal.append(f"OK     : '{node.name}' créé sous '{dossier_parent_resolve.GetName()}'")
+            journal.append(tr("OK     : '{0}' créé sous '{1}'", node.name, dossier_parent_resolve.GetName()))
             if node.children:
                 creer_bins(media_pool, nouveau_bin, node.children, journal)
         else:
-            journal.append(f"ERREUR : échec de création pour '{node.name}' sous '{dossier_parent_resolve.GetName()}'")
+            journal.append(tr("ERREUR : échec de création pour '{0}' sous '{1}'",
+                              node.name, dossier_parent_resolve.GetName()))
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +153,7 @@ class BinBuilderWindow(PMWindow):
 
     def _build_content(self, main):
         if self.media_pool is None:
-            tk.Label(main, text="Aucun projet Resolve ouvert.", bg=Theme.DARK_BG, fg=Theme.DANGER).pack(pady=20)
+            tk.Label(main, text=tr("Aucun projet Resolve ouvert."), bg=Theme.DARK_BG, fg=Theme.DANGER).pack(pady=20)
             return
 
         notebook = ttk.Notebook(main)
@@ -159,27 +161,27 @@ class BinBuilderWindow(PMWindow):
         self._construire_onglet_miroir(notebook)
         self._construire_onglet_manuel(notebook)
 
-        cadre_destination = ttk.LabelFrame(main, text="Où créer les bins")
+        cadre_destination = ttk.LabelFrame(main, text=tr("Où créer les bins"))
         cadre_destination.pack(fill="x", pady=(0, 10))
         self.destination_var = tk.StringVar(value="racine")
-        ttk.Radiobutton(cadre_destination, text="Racine du Media Pool",
+        ttk.Radiobutton(cadre_destination, text=tr("Racine du Media Pool"),
                         variable=self.destination_var, value="racine").pack(anchor="w", padx=10, pady=2)
-        ttk.Radiobutton(cadre_destination, text="Bin actuellement sélectionné dans Resolve",
+        ttk.Radiobutton(cadre_destination, text=tr("Bin actuellement sélectionné dans Resolve"),
                         variable=self.destination_var, value="selection").pack(anchor="w", padx=10, pady=2)
 
-        cadre_apercu = ttk.LabelFrame(main, text="Aperçu de l'arborescence à créer")
+        cadre_apercu = ttk.LabelFrame(main, text=tr("Aperçu de l'arborescence à créer"))
         cadre_apercu.pack(fill="both", expand=True, pady=(0, 10))
         self.arbre_apercu = ttk.Treeview(cadre_apercu, show="tree", height=8, selectmode="extended")
         self.arbre_apercu.pack(fill="both", expand=True, padx=5, pady=5)
         self.arbre_apercu.bind("<Delete>", lambda e: self._retirer_selection())
         self.arbre_apercu.bind("<BackSpace>", lambda e: self._retirer_selection())
         self._noeuds_apercu = {}  # id Treeview -> (BinNode, liste parente)
-        ttk.Button(cadre_apercu, text="Retirer la sélection (Suppr)",
+        ttk.Button(cadre_apercu, text=tr("Retirer la sélection (Suppr)"),
                    command=self._retirer_selection).pack(anchor="e", padx=5, pady=(0, 5))
 
         cadre_actions = tk.Frame(main, bg=Theme.DARK_BG)
         cadre_actions.pack(fill="x")
-        self.bouton_creer = self.button(cadre_actions, "CRÉER LES BINS", Theme.SUCCESS,
+        self.bouton_creer = self.button(cadre_actions, tr("CRÉER LES BINS"), Theme.SUCCESS,
                                          self._creer_bins_clic, side="right")
         self.bouton_creer.config(state="disabled")
 
@@ -189,34 +191,34 @@ class BinBuilderWindow(PMWindow):
 
     def _construire_onglet_miroir(self, notebook):
         onglet = ttk.Frame(notebook)
-        notebook.add(onglet, text="Mode Miroir (dossier Finder)")
+        notebook.add(onglet, text=tr("Mode Miroir (dossier Finder)"))
 
-        ttk.Label(onglet, text="Dossier source :").pack(anchor="w", padx=10, pady=(10, 0))
+        ttk.Label(onglet, text=tr("Dossier source :")).pack(anchor="w", padx=10, pady=(10, 0))
         cadre_chemin = ttk.Frame(onglet)
         cadre_chemin.pack(fill="x", padx=10, pady=5)
-        self.chemin_var = tk.StringVar(value="(aucun dossier sélectionné)")
+        self.chemin_var = tk.StringVar(value=tr("(aucun dossier sélectionné)"))
         ttk.Label(cadre_chemin, textvariable=self.chemin_var).pack(side="left", fill="x", expand=True)
-        ttk.Button(cadre_chemin, text="Parcourir…", command=self._choisir_dossier).pack(side="right")
+        ttk.Button(cadre_chemin, text=tr("Parcourir…"), command=self._choisir_dossier).pack(side="right")
 
         self.inclure_racine_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(onglet, text="Créer un bin pour le dossier sélectionné lui-même (pas seulement son contenu)",
+        ttk.Checkbutton(onglet, text=tr("Créer un bin pour le dossier sélectionné lui-même (pas seulement son contenu)"),
                         variable=self.inclure_racine_var).pack(anchor="w", padx=10, pady=5)
 
-        ttk.Label(onglet, text="Motifs à exclure (séparés par des virgules, syntaxe glob type *.tmp) :").pack(
+        ttk.Label(onglet, text=tr("Motifs à exclure (séparés par des virgules, syntaxe glob type *.tmp) :")).pack(
             anchor="w", padx=10, pady=(10, 0))
         self.exclusions_var = tk.StringVar(value="_historique*, node_modules, .git")
         ttk.Entry(onglet, textvariable=self.exclusions_var).pack(fill="x", padx=10, pady=5)
-        ttk.Label(onglet, text="(les dossiers commençant par un point sont toujours exclus automatiquement)").pack(
+        ttk.Label(onglet, text=tr("(les dossiers commençant par un point sont toujours exclus automatiquement)")).pack(
             anchor="w", padx=10)
 
-        ttk.Button(onglet, text="Prévisualiser", command=self._previsualiser_miroir).pack(anchor="e", padx=10, pady=15)
+        ttk.Button(onglet, text=tr("Prévisualiser"), command=self._previsualiser_miroir).pack(anchor="e", padx=10, pady=15)
         self.chemin_dossier_source = None
 
     def _construire_onglet_manuel(self, notebook):
         onglet = ttk.Frame(notebook)
-        notebook.add(onglet, text="Mode Manuel (liste indentée)")
+        notebook.add(onglet, text=tr("Mode Manuel (liste indentée)"))
 
-        ttk.Label(onglet, text="Une entrée par ligne. Indentation par TABULATION pour créer un sous-bin.").pack(
+        ttk.Label(onglet, text=tr("Une entrée par ligne. Indentation par TABULATION pour créer un sous-bin.")).pack(
             anchor="w", padx=10, pady=(10, 5))
 
         self.zone_texte = tk.Text(onglet, height=12, wrap="none", bg=Theme.PANEL_BG, fg=Theme.FG,
@@ -224,18 +226,18 @@ class BinBuilderWindow(PMWindow):
         self.zone_texte.pack(fill="both", expand=True, padx=10, pady=5)
         self.zone_texte.insert("1.0", "VFX\n\tPlates\n\tComp\nSound\n\tSFX\n\tDialogue\n")
 
-        ttk.Button(onglet, text="Prévisualiser", command=self._previsualiser_manuel).pack(anchor="e", padx=10, pady=10)
+        ttk.Button(onglet, text=tr("Prévisualiser"), command=self._previsualiser_manuel).pack(anchor="e", padx=10, pady=10)
 
     # -- Actions ---------------------------------------------------------
     def _choisir_dossier(self):
-        chemin = pm_common.pick_folder("Choisir le dossier à reproduire", parent=self)
+        chemin = pm_common.pick_folder(tr("Choisir le dossier à reproduire"), parent=self)
         if chemin:
             self.chemin_dossier_source = chemin
             self.chemin_var.set(chemin)
 
     def _previsualiser_miroir(self):
         if not self.chemin_dossier_source:
-            messagebox.showwarning("BinBuilder", "Choisis d'abord un dossier source.")
+            messagebox.showwarning("BinBuilder", tr("Choisis d'abord un dossier source."))
             return
 
         patterns = [p.strip() for p in self.exclusions_var.get().split(",") if p.strip()]
@@ -243,13 +245,13 @@ class BinBuilderWindow(PMWindow):
         try:
             node_racine = construire_arbre_depuis_dossier(self.chemin_dossier_source, patterns)
         except Exception as e:
-            messagebox.showerror("BinBuilder", f"Erreur lors de la lecture du dossier :\n{e}")
+            messagebox.showerror("BinBuilder", tr("Erreur lors de la lecture du dossier :\n{0}", e))
             return
 
         arbre = [node_racine] if self.inclure_racine_var.get() else node_racine.children
 
         if not arbre:
-            messagebox.showinfo("BinBuilder", "Aucun sous-dossier trouvé (après filtrage). Rien à créer.")
+            messagebox.showinfo("BinBuilder", tr("Aucun sous-dossier trouvé (après filtrage). Rien à créer."))
             return
 
         self._afficher_apercu(arbre)
@@ -257,17 +259,17 @@ class BinBuilderWindow(PMWindow):
     def _previsualiser_manuel(self):
         texte = self.zone_texte.get("1.0", "end")
         if not texte.strip():
-            messagebox.showwarning("BinBuilder", "La liste est vide.")
+            messagebox.showwarning("BinBuilder", tr("La liste est vide."))
             return
 
         try:
             arbre = parser_liste_indentee(texte)
         except ValueError as e:
-            messagebox.showerror("BinBuilder", f"Erreur de format :\n{e}")
+            messagebox.showerror("BinBuilder", tr("Erreur de format :\n{0}", e))
             return
 
         if not arbre:
-            messagebox.showinfo("BinBuilder", "Aucune entrée valide trouvée.")
+            messagebox.showinfo("BinBuilder", tr("Aucune entrée valide trouvée."))
             return
 
         self._afficher_apercu(arbre)
@@ -292,7 +294,8 @@ class BinBuilderWindow(PMWindow):
 
     def _maj_statut(self):
         nb_total = self._compter_bins(self.arbre_en_attente)
-        self.label_statut.config(text=f"{nb_total} bin(s) prêt(s) à être créé(s). Vérifie l'aperçu ci-dessus.")
+        self.label_statut.config(text=tr("{0} bin(s) prêt(s) à être créé(s). Vérifie l'aperçu ci-dessus.",
+                                         nb_total))
 
     def _retirer_selection(self):
         """Retire de l'aperçu (et donc de la création) les bins sélectionnés, sous-bins compris."""
@@ -309,7 +312,7 @@ class BinBuilderWindow(PMWindow):
         else:
             self.arbre_en_attente = None
             self.bouton_creer.config(state="disabled")
-            self.label_statut.config(text="Aperçu vide : rien à créer.")
+            self.label_statut.config(text=tr("Aperçu vide : rien à créer."))
 
     def _compter_bins(self, arbre):
         total = 0
@@ -326,7 +329,7 @@ class BinBuilderWindow(PMWindow):
         else:
             dossier_parent = self.media_pool.GetCurrentFolder()
             if dossier_parent is None:
-                messagebox.showerror("BinBuilder", "Impossible de récupérer le bin sélectionné dans Resolve.")
+                messagebox.showerror("BinBuilder", tr("Impossible de récupérer le bin sélectionné dans Resolve."))
                 return
 
         journal = []
@@ -334,15 +337,17 @@ class BinBuilderWindow(PMWindow):
 
         chemin_log = pm_common.write_log(TOOL_NAME, journal)
 
-        nb_erreurs = sum(1 for l in journal if l.startswith("ERREUR"))
+        nb_erreurs = sum(1 for l in journal if l.startswith(tr("ERREUR")))
         nb_ok = len(journal) - nb_erreurs
 
         if nb_erreurs:
-            messagebox.showwarning("BinBuilder", f"{nb_ok} bin(s) créé(s), {nb_erreurs} erreur(s).\nDétail dans le log :\n{chemin_log}")
+            messagebox.showwarning("BinBuilder", tr("{0} bin(s) créé(s), {1} erreur(s).\nDétail dans le log :\n{2}",
+                                                    nb_ok, nb_erreurs, chemin_log))
         else:
-            messagebox.showinfo("BinBuilder", f"{nb_ok} bin(s) créé(s) avec succès.\nLog : {chemin_log}")
+            messagebox.showinfo("BinBuilder", tr("{0} bin(s) créé(s) avec succès.\nLog : {1}",
+                                                 nb_ok, chemin_log))
 
-        self.label_statut.config(text=f"Terminé. Log : {chemin_log}")
+        self.label_statut.config(text=tr("Terminé. Log : {0}", chemin_log))
         self.bouton_creer.config(state="disabled")
         self.arbre_en_attente = None
 

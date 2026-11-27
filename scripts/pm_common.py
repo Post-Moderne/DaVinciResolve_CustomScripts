@@ -16,8 +16,11 @@ import glob
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime
+
+from pm_tools import i18n
+from pm_tools.i18n import tr
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +78,7 @@ def install_paths(variant=None):
     """
     variant = variant or RESOLVE_VARIANT
     if variant not in PATHS:
-        raise RuntimeError("Variante de DaVinci Resolve non détectée (dossier Fusion/Scripts introuvable).")
+        raise RuntimeError(tr("Variante de DaVinci Resolve non détectée (dossier Fusion/Scripts introuvable)."))
     p = PATHS[variant]
     return {"utility": p["scripts"] + "/Utility", "modules": p["modules"]}
 
@@ -141,10 +144,9 @@ def import_resolve_script():
                 os.environ.pop("RESOLVE_SCRIPT_LIB", None)
 
     raise RuntimeError(
-        "Le module DaVinciResolveScript n'a pas pu être chargé.\n"
-        f"Cause : {error}\n\n"
-        "Lance ce script depuis Workspace > Scripts dans DaVinci Resolve. "
-        "Si c'est déjà le cas, relance Install-PM-Suite.command."
+        tr("Le module DaVinciResolveScript n'a pas pu être chargé.\n"
+           "Cause : {0}\n\nLance ce script depuis Workspace > Scripts dans DaVinci Resolve. Si "
+           "c'est déjà le cas, relance Install-PM-Suite.command.", error)
     )
 
 
@@ -171,12 +173,12 @@ def get_resolve_objects():
 
     resolve = dvr.scriptapp("Resolve")
     if not resolve:
-        raise RuntimeError("Impossible de se connecter à DaVinci Resolve. Est-il ouvert ?")
+        raise RuntimeError(tr("Impossible de se connecter à DaVinci Resolve. Est-il ouvert ?"))
 
     pm = resolve.GetProjectManager()
     project = pm.GetCurrentProject()
     if not project:
-        raise RuntimeError("Aucun projet ouvert dans Resolve.")
+        raise RuntimeError(tr("Aucun projet ouvert dans Resolve."))
 
     media_pool = project.GetMediaPool()
     return resolve, project, media_pool
@@ -219,7 +221,7 @@ def write_log(tool_name, lines):
     horodatage = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     chemin = os.path.join(log_dir, f"{horodatage}.log")
     with open(chemin, "w", encoding="utf-8") as f:
-        f.write(f"{tool_name} – exécution du {datetime.now().isoformat()}\n")
+        f.write(tr("{0} – exécution du {1}\n", tool_name, datetime.now().isoformat()))
         f.write("=" * 60 + "\n")
         for ligne in lines:
             f.write(str(ligne) + "\n")
@@ -229,7 +231,7 @@ def write_log(tool_name, lines):
 def write_error_log(tool_name, exc):
     """Raccourci pour logger une exception non gérée. Retourne le chemin du log."""
     import traceback
-    lines = [f"ERREUR : {exc}", "", "Traceback :", traceback.format_exc()]
+    lines = [tr("ERREUR : {0}", exc), "", "Traceback :", traceback.format_exc()]
     return write_log(tool_name, lines)
 
 
@@ -301,6 +303,8 @@ class Theme:
     DANGER    = "#e05555"
     FG        = "#d8d8e8"
     FG_DIM    = "#7878a0"
+    # Sous macOS un tk.Button ignore bg et reste clair : son texte doit toujours être foncé.
+    BUTTON_FG = "#0a0a10"
     FONT_MONO = ("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10)
     FONT_UI   = ("SF Pro Display", 12) if sys.platform == "darwin" else ("Segoe UI", 11)
     FONT_SM   = ("SF Pro Display", 10) if sys.platform == "darwin" else ("Segoe UI", 9)
@@ -316,13 +320,16 @@ def style_ttk(root):
                 foreground=Theme.FG, selectbackground=Theme.ACCENT,
                 selectforeground="white", bordercolor=Theme.BORDER,
                 arrowcolor=Theme.FG_DIM, relief="flat")
-    s.map("TCombobox", fieldbackground=[("readonly", Theme.PANEL_BG)])
+    # « disabled » d'abord : sinon le fond clair par défaut de « clam » rend le texte illisible.
+    s.map("TCombobox", fieldbackground=[("disabled", Theme.DARK_BG), ("readonly", Theme.PANEL_BG)],
+          foreground=[("disabled", Theme.FG_DIM)])
 
     s.configure("Treeview", background=Theme.PANEL_BG, foreground=Theme.FG,
                 fieldbackground=Theme.PANEL_BG, rowheight=24, borderwidth=0)
     s.configure("Treeview.Heading", background=Theme.BORDER, foreground=Theme.FG,
                 relief="flat")
     s.map("Treeview", background=[("selected", Theme.ACCENT)])
+    s.map("Treeview.Heading", background=[("active", Theme.BORDER)])
 
     s.configure("TNotebook", background=Theme.DARK_BG, borderwidth=0)
     s.configure("TNotebook.Tab", background=Theme.PANEL_BG, foreground=Theme.FG,
@@ -339,9 +346,12 @@ def style_ttk(root):
     s.configure("TLabel", background=Theme.DARK_BG, foreground=Theme.FG)
     s.configure("TButton", background=Theme.PANEL_BG, foreground=Theme.FG,
                 bordercolor=Theme.BORDER, relief="flat", padding=6)
-    s.map("TButton", background=[("active", Theme.ACCENT_HO)])
+    s.map("TButton", background=[("active", Theme.ACCENT_HO)],
+          foreground=[("active", Theme.BUTTON_FG)])
     s.configure("TCheckbutton", background=Theme.DARK_BG, foreground=Theme.FG)
     s.configure("TRadiobutton", background=Theme.DARK_BG, foreground=Theme.FG)
+    for name in ("TCheckbutton", "TRadiobutton"):       # survol : garder le fond foncé
+        s.map(name, background=[("active", Theme.DARK_BG)])
     s.configure("TEntry", fieldbackground=Theme.PANEL_BG, foreground=Theme.FG,
                 bordercolor=Theme.BORDER, insertcolor=Theme.ACCENT)
 
@@ -360,6 +370,7 @@ class PMWindow(tk.Toplevel):
 
     def __init__(self, master, title, subtitle=None):
         super().__init__(master)
+        i18n.load()      # couvre aussi le lancement autonome d'un outil
         self.title(title)
         self.resizable(True, True)
         self.configure(bg=Theme.DARK_BG)
@@ -393,8 +404,10 @@ class PMWindow(tk.Toplevel):
                      bg="#111116", fg=Theme.FG_DIM).pack(side="right", padx=20)
 
     def section(self, parent, label):
-        tk.Label(parent, text=label, font=(Theme.FONT_UI[0], 9, "bold"),
-                  bg=Theme.DARK_BG, fg=Theme.FG_DIM).pack(anchor="w", pady=(10, 2))
+        lbl = tk.Label(parent, text=label, font=(Theme.FONT_UI[0], 9, "bold"),
+                       bg=Theme.DARK_BG, fg=Theme.FG_DIM)
+        lbl.pack(anchor="w", pady=(10, 2))
+        return lbl
 
     def entry(self, parent, var, placeholder=""):
         e = tk.Entry(parent, textvariable=var, font=Theme.FONT_MONO,
@@ -431,8 +444,8 @@ class PMWindow(tk.Toplevel):
 
     def button(self, parent, label, color, cmd, side="left", padx_l=0):
         b = tk.Button(parent, text=label, font=(Theme.FONT_UI[0], 10, "bold"),
-                      bg=color, fg="#0a0a10" if color != Theme.FG_DIM else Theme.DARK_BG,
-                      activebackground=Theme.ACCENT_HO, relief="flat", bd=0,
+                      bg=color, fg=Theme.BUTTON_FG if color != Theme.FG_DIM else Theme.DARK_BG,
+                      activebackground=Theme.ACCENT_HO, disabledforeground="#5c5c66", relief="flat", bd=0,
                       padx=18, pady=8, cursor="hand2", command=cmd)
         b.pack(side=side, padx=(padx_l, 0))
         return b
@@ -513,7 +526,7 @@ class PMWindow(tk.Toplevel):
 # ---------------------------------------------------------------------------
 # Sélecteur de fichier
 # ---------------------------------------------------------------------------
-def pick_file(title="Choisir un fichier", extensions=None, parent=None):
+def pick_file(title=None, extensions=None, parent=None):
     """
     Ouvre un sélecteur de fichier et retourne le chemin choisi, ou "" si annulé
     ou indisponible.
@@ -524,6 +537,7 @@ def pick_file(title="Choisir un fichier", extensions=None, parent=None):
     filedialog. `extensions` : liste sans point, ex. ["csv"].
     """
     import subprocess
+    title = title or tr("Choisir un fichier")
     if sys.platform == "darwin":
         script = f'POSIX path of (choose file with prompt "{title}"'
         if extensions:
@@ -540,20 +554,21 @@ def pick_file(title="Choisir un fichier", extensions=None, parent=None):
             pass
     from tkinter import filedialog
     try:
-        types = [("Fichiers", " ".join(f"*.{e}" for e in extensions))] if extensions else []
+        types = [(tr("Fichiers"), " ".join(f"*.{e}" for e in extensions))] if extensions else []
         return filedialog.askopenfilename(title=title, parent=parent,
-                                          filetypes=types + [("Tous les fichiers", "*.*")]) or ""
+                                          filetypes=types + [(tr("Tous les fichiers"), "*.*")]) or ""
     except Exception:
         return ""
 
 
-def pick_folder(title="Choisir un dossier", parent=None):
+def pick_folder(title=None, parent=None):
     """
     Sélecteur de dossier : même logique que pick_file (osascript d'abord, car
     filedialog ne s'affiche pas de façon fiable dans Resolve). Retourne "" si
     annulé ou indisponible.
     """
     import subprocess
+    title = title or tr("Choisir un dossier")
     if sys.platform == "darwin":
         script = f'POSIX path of (choose folder with prompt "{title}")'
         try:
@@ -570,6 +585,70 @@ def pick_folder(title="Choisir un dossier", parent=None):
         return filedialog.askdirectory(title=title, parent=parent) or ""
     except Exception:
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Association des colonnes d'un CSV
+# ---------------------------------------------------------------------------
+def ask_columns(parent, message, fields, headers, on_sample):
+    """
+    Dialogue modal : l'utilisateur associe les colonnes d'un CSV non reconnu.
+    fields  : liste de (libellé, index deviné ou None, obligatoire).
+    headers : en-têtes lus dans le CSV (les vides ne sont pas proposés).
+    on_sample(fenêtre) : bouton « Générer un CSV exemple… ».
+    Retourne la liste des index choisis (None pour un champ facultatif laissé vide),
+    ou None si l'utilisateur annule.
+    """
+    labels = {}                                    # libellé affiché → index de colonne
+    for i, header in enumerate(headers):
+        text = " ".join((header or "").split())
+        if text:
+            labels[tr("{0} (colonne {1})", text, i + 1) if text in labels else text] = i
+    shown = {i: text for text, i in labels.items()}
+    none = tr("(aucune)")
+
+    dlg = tk.Toplevel(parent)
+    dlg.title(tr("Colonnes du CSV"))
+    dlg.configure(bg=Theme.DARK_BG)
+    dlg.transient(parent)
+    dlg.resizable(False, False)
+    body = tk.Frame(dlg, bg=Theme.DARK_BG, padx=20, pady=16)
+    body.pack()
+    tk.Label(body, text=message, justify="left", bg=Theme.DARK_BG, fg=Theme.FG).pack(anchor="w")
+    variables = []
+    for label, guess, required in fields:
+        var = tk.StringVar(value=shown.get(guess, "" if required else none))
+        variables.append(var)
+        row = tk.Frame(body, bg=Theme.DARK_BG)
+        row.pack(fill="x", pady=(10, 0))
+        tk.Label(row, text=label, width=18, anchor="w", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
+        ttk.Combobox(row, textvariable=var, state="readonly", width=34,
+                     values=list(labels) if required else [none] + list(labels)).pack(side="left")
+    result = {"columns": None}
+
+    def ok():
+        chosen = [labels.get(var.get()) for var in variables]
+        used = [c for c in chosen if c is not None]
+        if len(used) != len(set(used)) or any(c is None and f[2] for c, f in zip(chosen, fields)):
+            messagebox.showwarning(tr("Colonnes"), tr("Choisis une colonne différente pour chaque champ."),
+                                   parent=dlg)
+            return
+        result["columns"] = chosen
+        dlg.destroy()
+
+    buttons = tk.Frame(body, bg=Theme.DARK_BG)
+    buttons.pack(fill="x", pady=(16, 0))
+    for label, color, command, side in (
+            (tr("Utiliser ces colonnes"), Theme.SUCCESS, ok, "right"),
+            (tr("Annuler"), Theme.PANEL_BG, dlg.destroy, "right"),
+            (tr("Générer un CSV exemple…"), Theme.PANEL_BG, lambda: on_sample(dlg), "left")):
+        tk.Button(buttons, text=label, bg=color, fg=Theme.BUTTON_FG, relief="flat", bd=0, padx=14, pady=6,
+                  cursor="hand2", command=command).pack(side=side, padx=(6, 0))
+    dlg.update_idletasks()
+    dlg.geometry(f"+{parent.winfo_rootx() + 60}+{parent.winfo_rooty() + 80}")
+    dlg.grab_set()
+    parent.wait_window(dlg)
+    return result["columns"]
 
 
 # ---------------------------------------------------------------------------

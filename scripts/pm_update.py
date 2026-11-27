@@ -32,6 +32,7 @@ from tkinter import messagebox
 
 import pm_common
 from pm_common import PMWindow, Theme
+from pm_tools.i18n import tr
 
 TOOL_NAME = "PM-Update"
 REPO = "Post-Moderne/DaVinciResolve_CustomScripts"
@@ -53,7 +54,7 @@ def parse_version(v):
     core = (v or "").strip().split("-")[0]
     parts = core.split(".")
     if not parts or not all(p.isdigit() for p in parts):
-        raise ValueError(f"Version illisible : '{v}'")
+        raise ValueError(tr("Version illisible : '{0}'", v))
     return tuple(int(p) for p in parts)
 
 
@@ -72,10 +73,10 @@ def _curl(url, dest=None, headers=()):
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=150)
     except (OSError, subprocess.SubprocessError) as e:
-        raise RuntimeError(f"curl indisponible ou expiré : {e}")
+        raise RuntimeError(tr("curl indisponible ou expiré : {0}", e))
     if r.returncode != 0:
         err = r.stderr.decode("utf-8", "replace").strip()
-        raise RuntimeError(f"Téléchargement impossible (curl {r.returncode}) : {err or url}")
+        raise RuntimeError(tr("Téléchargement impossible (curl {0}) : {1}", r.returncode, err or url))
     return r.stdout
 
 
@@ -104,7 +105,7 @@ def download_source(tmp_dir):
         z.extractall(tmp_dir)
     found = glob.glob(os.path.join(tmp_dir, "*", "scripts", "PM-Suite.py"))
     if not found:
-        raise RuntimeError("Archive inattendue : scripts/PM-Suite.py introuvable.")
+        raise RuntimeError(tr("Archive inattendue : scripts/PM-Suite.py introuvable."))
     return os.path.dirname(found[0])
 
 
@@ -116,13 +117,14 @@ def apply_update(src, utility_dir, modules_dir):
     """
     for name in ("PM-Suite.py", "pm_common.py", "pm_update.py", "VERSION", "pm_tools"):
         if not os.path.exists(os.path.join(src, name)):
-            raise RuntimeError(f"Source incomplète : {name} manquant.")
+            raise RuntimeError(tr("Source incomplète : {0} manquant.", name))
     for d in (utility_dir, modules_dir):
         os.makedirs(d, exist_ok=True)
         if not os.access(d, os.W_OK):
             raise PermissionError(
-                f"Pas le droit d'écrire dans :\n{d}\n"
-                "Relance l'installeur (Install-PM-Suite.command), qui demande le mot de passe admin.")
+                tr("Pas le droit d'écrire dans :\n{0}\n"
+                   "Relance l'installeur (Install-PM-Suite.command), qui demande le mot de passe admin.",
+                   d))
 
     # (nom, dossier cible) — PM-Suite.py va dans Utility, le reste dans Modules.
     targets = [("PM-Suite.py", utility_dir)] + [
@@ -161,23 +163,23 @@ def apply_update(src, utility_dir, modules_dir):
 class UpdateWindow(PMWindow):
     def __init__(self, master):
         self.remote = None
-        super().__init__(master, "Mises à jour", f"Resolve  ·  {pm_common.RESOLVE_VARIANT}")
+        super().__init__(master, tr("Mises à jour"), f"Resolve  ·  {pm_common.RESOLVE_VARIANT}")
 
     def _build_content(self, main):
         grid = tk.Frame(main, bg=Theme.DARK_BG)
         grid.pack(fill="x")
-        self.lbl_local = self._row(grid, 0, "Version installée", f"v{pm_common.get_version()}")
-        self.lbl_remote = self._row(grid, 1, "Dernière version", "—")
+        self.lbl_local = self._row(grid, 0, tr("Version installée"), f"v{pm_common.get_version()}")
+        self.lbl_remote = self._row(grid, 1, tr("Dernière version"), "—")
 
         btns = tk.Frame(main, bg=Theme.DARK_BG)
         btns.pack(fill="x", pady=(14, 0))
-        self.btn_check = self.button(btns, "Vérifier", Theme.PANEL_BG, self.on_check, side="left")
-        self.btn_install = self.button(btns, "Installer la mise à jour", Theme.SUCCESS,
+        self.btn_check = self.button(btns, tr("Vérifier"), Theme.PANEL_BG, self.on_check, side="left")
+        self.btn_install = self.button(btns, tr("Installer la mise à jour"), Theme.SUCCESS,
                                         self.on_install, side="right")
         self.btn_install.config(state="disabled")
 
         self.log = self.build_log(main, height=8)
-        self.log_write(self.log, "Clique sur « Vérifier » pour interroger GitHub.\n", "dim")
+        self.log_write(self.log, tr("Clique sur « Vérifier » pour interroger GitHub.\n"), "dim")
 
     def _row(self, parent, r, label, value):
         tk.Label(parent, text=label, bg=Theme.DARK_BG, fg=Theme.FG_DIM,
@@ -189,27 +191,27 @@ class UpdateWindow(PMWindow):
 
     def on_check(self):
         self.btn_install.config(state="disabled")
-        self.log_write(self.log, "\nInterrogation de GitHub…\n", "dim")
+        self.log_write(self.log, tr("\nInterrogation de GitHub…\n"), "dim")
         self.update_idletasks()
         try:
             self.remote = fetch_remote_version()
             newer = is_newer(self.remote, pm_common.get_version())
         except Exception as e:
-            self.log_write(self.log, f"[ERREUR] {e}\n", "err")
-            self.lbl_remote.config(text="indisponible")
+            self.log_write(self.log, tr("[ERREUR] {0}\n", e), "err")
+            self.lbl_remote.config(text=tr("indisponible"))
             return
         self.lbl_remote.config(text=f"v{self.remote}")
         if newer:
-            self.log_write(self.log, f"Mise à jour disponible : v{self.remote}.\n", "accent")
+            self.log_write(self.log, tr("Mise à jour disponible : v{0}.\n", self.remote), "accent")
             self.btn_install.config(state="normal")
         else:
-            self.log_write(self.log, "Tu as déjà la dernière version.\n", "ok")
+            self.log_write(self.log, tr("Tu as déjà la dernière version.\n"), "ok")
 
     def on_install(self):
-        if not messagebox.askyesno("Mise à jour", f"Installer la v{self.remote} ?\n"
-                                   "Relance ensuite PM-Suite pour l'utiliser.", parent=self):
+        if not messagebox.askyesno(tr("Mise à jour"), tr("Installer la v{0} ?\nRelance ensuite PM-Suite pour l'utiliser.",
+                                                     self.remote), parent=self):
             return
-        self.log_write(self.log, "\nTéléchargement…\n", "dim")
+        self.log_write(self.log, tr("\nTéléchargement…\n"), "dim")
         self.update_idletasks()
         try:
             paths = pm_common.install_paths()
@@ -218,12 +220,12 @@ class UpdateWindow(PMWindow):
                 apply_update(src, paths["utility"], paths["modules"])
         except Exception as e:
             log = pm_common.write_error_log(TOOL_NAME, e)
-            self.log_write(self.log, f"[ERREUR] {e}\nLog : {log}\n", "err")
-            messagebox.showerror("Mise à jour", f"Échec (fichiers précédents conservés) :\n{e}", parent=self)
+            self.log_write(self.log, tr("[ERREUR] {0}\nLog : {1}\n", e, log), "err")
+            messagebox.showerror(tr("Mise à jour"), tr("Échec (fichiers précédents conservés) :\n{0}", e), parent=self)
             return
         self.btn_install.config(state="disabled")
-        self.log_write(self.log, f"Installé : v{self.remote}. Ferme et relance PM-Suite.\n", "ok")
-        messagebox.showinfo("Mise à jour", f"v{self.remote} installée.\nFerme et relance PM-Suite.", parent=self)
+        self.log_write(self.log, tr("Installé : v{0}. Ferme et relance PM-Suite.\n", self.remote), "ok")
+        messagebox.showinfo(tr("Mise à jour"), tr("v{0} installée.\nFerme et relance PM-Suite.", self.remote), parent=self)
 
 
 def open_window(master):

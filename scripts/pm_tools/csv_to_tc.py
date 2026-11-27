@@ -25,6 +25,7 @@ from tkinter import ttk, messagebox
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pm_common
 from pm_common import PMWindow, Theme
+from pm_tools.i18n import tr
 
 TOOL_NAME = "PM-CSV-2-StartTC"
 
@@ -64,8 +65,9 @@ class ColumnsNotFound(ValueError):
         self.name_col = name_col
         self.start_col = start_col
         super().__init__(
-            f"Colonnes requises introuvables. Colonnes détectées : {self.fieldnames}\n"
-            "Le CSV doit contenir une colonne 'Name' et une colonne 'Start'."
+            tr("Colonnes requises introuvables. Colonnes détectées : {0}\n"
+               "Le CSV doit contenir une colonne 'Name' et une colonne 'Start'.",
+               self.fieldnames)
         )
 
 
@@ -95,12 +97,12 @@ def normalize_tc(raw):
     """
     s = (raw or "").strip()
     if not s:
-        return "", "invalid", "TC vide"
+        return "", "invalid", tr("TC vide")
     m = _TC_OK.match(s)
     if m:
         h, mi, se = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if h > 23 or mi > 59 or se > 59:
-            return s, "invalid", "heures/minutes/secondes hors limites"
+            return s, "invalid", tr("heures/minutes/secondes hors limites")
         return s, "ok", ""
 
     last_sep = ";" if re.search(r"\d;\d+$", s) else ":"       # drop-frame : on garde le ';' final
@@ -109,19 +111,19 @@ def normalize_tc(raw):
     else:
         parts = re.split(r"[:;.,\s]+", s)
     if not parts or not all(p.isdigit() and len(p) <= 3 for p in parts) or len(parts) not in (3, 4):
-        return s, "invalid", "format non reconnu (attendu HH:MM:SS:FF)"
+        return s, "invalid", tr("format non reconnu (attendu HH:MM:SS:FF)")
     note = []
     if len(parts) == 3:
         parts.append("00")
-        note.append("images ajoutées (:00)")
+        note.append(tr("images ajoutées (:00)"))
     parts = [p.zfill(2) for p in parts]
     if any(len(p) > 2 for p in parts):
-        return s, "invalid", "champ trop long (attendu HH:MM:SS:FF)"
+        return s, "invalid", tr("champ trop long (attendu HH:MM:SS:FF)")
     if int(parts[0]) > 23 or int(parts[1]) > 59 or int(parts[2]) > 59:
-        return s, "invalid", "heures/minutes/secondes hors limites"
+        return s, "invalid", tr("heures/minutes/secondes hors limites")
     fixed = ":".join(parts[:3]) + last_sep + parts[3]
     if not note:
-        note.append("séparateurs/zéros normalisés")
+        note.append(tr("séparateurs/zéros normalisés"))
     return fixed, "fixed", ", ".join(note)
 
 
@@ -175,8 +177,8 @@ SAMPLE_ROWS = [
 
 def write_sample_csv(folder):
     """Écrit le CSV exemple dans folder sans écraser un fichier existant. Retourne le chemin."""
-    base, ext = os.path.splitext(SAMPLE_FILENAME)
-    path = os.path.join(folder, SAMPLE_FILENAME)
+    base, ext = os.path.splitext(tr(SAMPLE_FILENAME))
+    path = os.path.join(folder, tr(SAMPLE_FILENAME))
     n = 2
     while os.path.exists(path):
         path = os.path.join(folder, f"{base}_{n}{ext}")
@@ -204,7 +206,7 @@ class CsvToTcWindow(PMWindow):
     def _build_content(self, main):
         top = tk.Frame(main, bg=Theme.DARK_BG)
         top.pack(fill="x")
-        tk.Label(top, text="Chemin CSV :", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
+        tk.Label(top, text=tr("Chemin CSV :"), bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
 
         self.path_var = tk.StringVar()
         self.entry_path = tk.Entry(top, textvariable=self.path_var, bg=Theme.PANEL_BG,
@@ -212,21 +214,21 @@ class CsvToTcWindow(PMWindow):
         self.entry_path.pack(side="left", padx=6, ipady=3)
         self.entry_path.bind("<Return>", lambda e: self.on_load_csv())
 
-        self.button(top, "Parcourir…", Theme.PANEL_BG, self.on_browse, side="left", padx_l=0)
-        self.button(top, "Charger", Theme.PANEL_BG, self.on_load_csv, side="left", padx_l=6)
-        self.button(top, "CSV exemple…", Theme.PANEL_BG, self.on_sample_csv, side="left", padx_l=6)
-        self.btn_apply = self.button(top, "Appliquer", Theme.SUCCESS, self.on_apply, side="right")
+        self.button(top, tr("Parcourir…"), Theme.PANEL_BG, self.on_browse, side="left", padx_l=0)
+        self.button(top, tr("Charger"), Theme.PANEL_BG, self.on_load_csv, side="left", padx_l=6)
+        self.button(top, tr("CSV exemple…"), Theme.PANEL_BG, self.on_sample_csv, side="left", padx_l=6)
+        self.btn_apply = self.button(top, tr("Appliquer"), Theme.SUCCESS, self.on_apply, side="right")
         self.btn_apply.config(state="disabled")
 
         status_row = tk.Frame(main, bg=Theme.DARK_BG)
         status_row.pack(fill="x", pady=(6, 0))
-        self.lbl_csv = tk.Label(status_row, text="Aucun CSV chargé", bg=Theme.DARK_BG, fg=Theme.FG)
+        self.lbl_csv = tk.Label(status_row, text=tr("Aucun CSV chargé"), bg=Theme.DARK_BG, fg=Theme.FG)
         self.lbl_csv.pack(side="left")
 
         columns = ("name", "old_tc", "new_tc", "status")
         self.tree = ttk.Treeview(main, columns=columns, show="headings", height=14)
-        headers = {"name": "Clip Name", "old_tc": "Start TC actuel",
-                   "new_tc": "Start TC (CSV)", "status": "Statut"}
+        headers = {"name": "Clip Name", "old_tc": tr("Start TC actuel"),
+                   "new_tc": "Start TC (CSV)", "status": tr("Statut")}
         widths = {"name": 300, "old_tc": 150, "new_tc": 150, "status": 240}
         for col in columns:
             self.tree.heading(col, text=headers[col])
@@ -244,28 +246,29 @@ class CsvToTcWindow(PMWindow):
     def _init_resolve(self):
         try:
             self.resolve, self.project, self.media_pool = pm_common.get_resolve_objects()
-            self.log_write(self.log, f"Connecté à Resolve (variante détectée : {pm_common.RESOLVE_VARIANT}).\n", "dim")
-            self.log_write(self.log, f"Projet actif : {self.project.GetName()}\n", "dim")
+            self.log_write(self.log, tr("Connecté à Resolve (variante détectée : {0}).\n",
+                                        pm_common.RESOLVE_VARIANT), "dim")
+            self.log_write(self.log, tr("Projet actif : {0}\n", self.project.GetName()), "dim")
         except Exception as e:
-            messagebox.showerror("Erreur de connexion", str(e))
+            messagebox.showerror(tr("Erreur de connexion"), str(e))
             self.resolve = self.project = self.media_pool = None
 
     # ---------------------------------------------------------------- Parcourir
     def on_browse(self):
         """Ouvre le sélecteur système (osascript) ; filedialog ne s'affiche pas de façon
         fiable dans Resolve. En cas d'échec, saisie manuelle du chemin."""
-        path = pm_common.pick_file("Choisir le fichier CSV", ["csv"], parent=self)
+        path = pm_common.pick_file(tr("Choisir le fichier CSV"), ["csv"], parent=self)
 
         if path:
             self.path_var.set(path)
             self.on_load_csv()
         else:
-            self.log_write(self.log, "[INFO] Aucun fichier sélectionné (ou dialogue non supporté ici). "
-                            "Colle le chemin du CSV directement dans le champ ci-dessus.\n", "dim")
+            self.log_write(self.log, tr("[INFO] Aucun fichier sélectionné (ou dialogue non supporté ici). Colle le chemin du "
+                                        "CSV directement dans le champ ci-dessus.\n"), "dim")
 
     # ---------------------------------------------------------------- CSV exemple
     def on_sample_csv(self):
-        folder = pm_common.pick_folder("Où enregistrer le CSV exemple ?", parent=self)
+        folder = pm_common.pick_folder(tr("Où enregistrer le CSV exemple ?"), parent=self)
         if not folder:
             return
         self._create_sample(folder)
@@ -274,68 +277,39 @@ class CsvToTcWindow(PMWindow):
         try:
             path = write_sample_csv(folder)
         except OSError as e:
-            messagebox.showerror("Erreur", f"Impossible d'écrire le CSV exemple :\n{e}")
+            messagebox.showerror(tr("Erreur"), tr("Impossible d'écrire le CSV exemple :\n{0}", e))
             return
-        self.log_write(self.log, f"CSV exemple créé : {path}\n"
-                        "Format : colonnes 'Name' (nom exact du clip) et 'Start' (HH:MM:SS:FF), "
-                        "séparateur , ou ;\n", "ok")
-        messagebox.showinfo("CSV exemple créé",
-                            f"{path}\n\nColonnes : Name (nom du clip tel qu'affiché dans le Media Pool) "
-                            "et Start (timecode HH:MM:SS:FF).")
+        self.log_write(self.log, tr("CSV exemple créé : {0}\nFormat : colonnes 'Name' (nom exact du clip) et 'Start' "
+                                    "(HH:MM:SS:FF), séparateur , ou ;\n",
+                                    path), "ok")
+        messagebox.showinfo(tr("CSV exemple créé"),
+                            tr("{0}\n\nColonnes : Name (nom du clip tel qu'affiché dans le Media Pool) et Start "
+                               "(timecode HH:MM:SS:FF).", path))
 
     def _ask_columns(self, err):
-        """Dialogue modal : l'utilisateur désigne les colonnes nom / TC. Retourne (name, start) ou None."""
-        dlg = tk.Toplevel(self)
-        dlg.title("Colonnes du CSV")
-        dlg.configure(bg=Theme.DARK_BG)
-        dlg.transient(self)
-        dlg.resizable(False, False)
-        body = tk.Frame(dlg, bg=Theme.DARK_BG, padx=20, pady=16)
-        body.pack()
-        tk.Label(body, justify="left", bg=Theme.DARK_BG, fg=Theme.FG,
-                 text="Je ne reconnais pas les colonnes de ce CSV.\n"
-                      "Indique laquelle contient le nom du clip et laquelle contient le Start TC\n"
-                      "(ou génère un CSV exemple pour voir le format attendu).").pack(anchor="w")
-        choices = [f for f in err.fieldnames if f]
-        nv = tk.StringVar(value=err.name_col or "")
-        sv = tk.StringVar(value=err.start_col or "")
-        for label, var in (("Nom du clip :", nv), ("Start TC :", sv)):
-            row = tk.Frame(body, bg=Theme.DARK_BG)
-            row.pack(fill="x", pady=(10, 0))
-            tk.Label(row, text=label, width=14, anchor="w", bg=Theme.DARK_BG, fg=Theme.FG).pack(side="left")
-            ttk.Combobox(row, textvariable=var, values=choices, state="readonly", width=34).pack(side="left")
-        result = {"cols": None}
+        """Dialogue d'association des colonnes. Retourne (name, start) ou None."""
+        headers = err.fieldnames
 
-        def ok():
-            if not nv.get() or not sv.get() or nv.get() == sv.get():
-                messagebox.showwarning("Colonnes", "Choisis deux colonnes différentes.", parent=dlg)
-                return
-            result["cols"] = (nv.get(), sv.get())
-            dlg.destroy()
+        def index(name):
+            return headers.index(name) if name in headers else None
 
-        def sample():
-            folder = pm_common.pick_folder("Où enregistrer le CSV exemple ?", parent=dlg)
+        def sample(window):
+            folder = pm_common.pick_folder(tr("Où enregistrer le CSV exemple ?"), parent=window)
             if folder:
                 self._create_sample(folder)
 
-        btns = tk.Frame(body, bg=Theme.DARK_BG)
-        btns.pack(fill="x", pady=(16, 0))
-        for label, color, cmd, side in (("Utiliser ces colonnes", Theme.SUCCESS, ok, "right"),
-                                        ("Annuler", Theme.PANEL_BG, dlg.destroy, "right"),
-                                        ("Générer un CSV exemple…", Theme.PANEL_BG, sample, "left")):
-            tk.Button(btns, text=label, bg=color, fg="#0a0a10" if color != Theme.PANEL_BG else Theme.FG,
-                      relief="flat", bd=0, padx=14, pady=6, cursor="hand2", command=cmd
-                      ).pack(side=side, padx=(6, 0))
-        dlg.update_idletasks()
-        dlg.geometry(f"+{self.winfo_rootx() + 60}+{self.winfo_rooty() + 80}")
-        dlg.grab_set()
-        self.wait_window(dlg)
-        return result["cols"]
+        chosen = pm_common.ask_columns(
+            self, tr("Je ne reconnais pas les colonnes de ce CSV.\n"
+                     "Indique laquelle contient le nom du clip et laquelle contient le Start TC\n"
+                     "(ou génère un CSV exemple pour voir le format attendu)."),
+            [(tr("Nom du clip :"), index(err.name_col), True), (tr("Start TC :"), index(err.start_col), True)],
+            headers, sample)
+        return None if chosen is None else tuple(headers[i] for i in chosen)
 
     # ---------------------------------------------------------------- Charger CSV
     def on_load_csv(self):
         if self.media_pool is None:
-            messagebox.showerror("Erreur", "Pas de connexion active à Resolve.")
+            messagebox.showerror(tr("Erreur"), tr("Pas de connexion active à Resolve."))
             return
 
         raw_path = self.path_var.get().strip()
@@ -343,11 +317,11 @@ class CsvToTcWindow(PMWindow):
         path = os.path.expanduser(path)
 
         if not path:
-            messagebox.showwarning("Chemin manquant", "Colle ou choisis d'abord le chemin du CSV.")
+            messagebox.showwarning(tr("Chemin manquant"), tr("Colle ou choisis d'abord le chemin du CSV."))
             return
         if not os.path.isfile(path):
-            messagebox.showerror("Fichier introuvable", f"Aucun fichier à ce chemin :\n{path}")
-            self.log_write(self.log, f"[ERREUR] Fichier introuvable : {path}\n", "err")
+            messagebox.showerror(tr("Fichier introuvable"), tr("Aucun fichier à ce chemin :\n{0}", path))
+            self.log_write(self.log, tr("[ERREUR] Fichier introuvable : {0}\n", path), "err")
             return
 
         info = {}
@@ -357,24 +331,25 @@ class CsvToTcWindow(PMWindow):
             except ColumnsNotFound as e:
                 cols = self._ask_columns(e)
                 if not cols:
-                    self.log_write(self.log, "[INFO] Chargement annulé : colonnes non identifiées.\n", "warn")
+                    self.log_write(self.log, tr("[INFO] Chargement annulé : colonnes non identifiées.\n"), "warn")
                     return
                 self.csv_rows = read_csv_rows(path, columns=cols, info=info)
                 info["auto"] = True
         except Exception as e:
-            messagebox.showerror("Erreur de lecture CSV", str(e))
+            messagebox.showerror(tr("Erreur de lecture CSV"), str(e))
             return
         if info.get("auto"):
-            self.log_write(self.log, f"Colonnes utilisées : '{info['name_col']}' → nom du clip, "
-                            f"'{info['start_col']}' → Start TC.\n", "dim")
+            self.log_write(self.log, tr("Colonnes utilisées : '{0}' → nom du clip, '{1}' → Start TC.\n",
+                                        info['name_col'], info['start_col']), "dim")
 
         self.lbl_csv.config(text=os.path.basename(path))
-        self.log_write(self.log, f"\nCSV chargé : {path} ({len(self.csv_rows)} lignes)\n", "dim")
+        self.log_write(self.log, tr("\nCSV chargé : {0} ({1} lignes)\n", path, len(self.csv_rows)), "dim")
 
         all_clips = []
         collect_all_clips(self.media_pool.GetRootFolder(), all_clips)
         self.name_index = build_name_index(all_clips)
-        self.log_write(self.log, f"{len(all_clips)} clips trouvés dans le Media Pool (tous bins confondus).\n", "dim")
+        self.log_write(self.log, tr("{0} clips trouvés dans le Media Pool (tous bins confondus).\n",
+                                    len(all_clips)), "dim")
 
         self._build_plan()
 
@@ -387,21 +362,25 @@ class CsvToTcWindow(PMWindow):
         for name, raw_tc in self.csv_rows:
             new_tc, tc_state, tc_note = normalize_tc(raw_tc)
             if tc_state == "invalid":
-                self.tree.insert("", "end", values=(name, "-", raw_tc, f"TC invalide : {tc_note}"), tags=("fail",))
-                self.log_write(self.log, f"[TC INVALIDE] '{name}' — '{raw_tc}' : {tc_note}. Ligne ignorée.\n", "warn")
+                self.tree.insert("", "end", values=(name, "-", raw_tc, tr("TC invalide : {0}", tc_note)), tags=("fail",))
+                self.log_write(self.log, tr("[TC INVALIDE] '{0}' — '{1}' : {2}. Ligne ignorée.\n",
+                                            name, raw_tc, tc_note), "warn")
                 n_bad += 1
                 continue
             matches = self.name_index.get(name, [])
 
             if len(matches) == 0:
-                self.tree.insert("", "end", values=(name, "-", new_tc, "Introuvable dans le Media Pool"), tags=("missing",))
-                self.log_write(self.log, f"[NON TROUVÉ] '{name}' — aucun clip correspondant dans le Media Pool.\n", "warn")
+                self.tree.insert("", "end", values=(name, "-", new_tc, tr("Introuvable dans le Media Pool")), tags=("missing",))
+                self.log_write(self.log, tr("[NON TROUVÉ] '{0}' — aucun clip correspondant dans le Media Pool.\n",
+                                            name), "warn")
                 n_missing += 1
                 continue
 
             if len(matches) > 1:
-                self.tree.insert("", "end", values=(name, "-", new_tc, f"Doublon ({len(matches)} clips) — ignoré"), tags=("dup",))
-                self.log_write(self.log, f"[DOUBLON] '{name}' — {len(matches)} clips portent ce nom, ligne ignorée.\n", "warn")
+                self.tree.insert("", "end", values=(name, "-", new_tc, tr("Doublon ({0} clips) — ignoré",
+                                                                          len(matches))), tags=("dup",))
+                self.log_write(self.log, tr("[DOUBLON] '{0}' — {1} clips portent ce nom, ligne ignorée.\n",
+                                            name, len(matches)), "warn")
                 n_dup += 1
                 continue
 
@@ -411,17 +390,19 @@ class CsvToTcWindow(PMWindow):
             except Exception:
                 old_tc = ""
 
-            status = "Prêt"
+            status = tr("Prêt")
             if tc_state == "fixed":
-                status = f"Prêt — TC corrigé ('{raw_tc}' : {tc_note})"
-                self.log_write(self.log, f"[TC CORRIGÉ] '{name}' — '{raw_tc}' → '{new_tc}' ({tc_note}).\n", "warn")
+                status = tr("Prêt — TC corrigé ('{0}' : {1})", raw_tc, tc_note)
+                self.log_write(self.log, tr("[TC CORRIGÉ] '{0}' — '{1}' → '{2}' ({3}).\n",
+                                            name, raw_tc, new_tc, tc_note), "warn")
                 n_fixed += 1
             self.tree.insert("", "end", values=(name, old_tc, new_tc, status), tags=("ok",))
             self.plan.append({"clip": clip, "name": name, "old_tc": old_tc, "new_tc": new_tc})
             n_ok += 1
 
-        self.log_write(self.log, f"\nRésumé preview : {n_ok} prêt(s), {n_dup} doublon(s) ignoré(s), "
-                        f"{n_missing} introuvable(s), {n_bad} TC invalide(s), {n_fixed} TC corrigé(s) automatiquement.\n", "accent")
+        self.log_write(self.log, tr("\nRésumé preview : {0} prêt(s), {1} doublon(s) ignoré(s), {2} introuvable(s), {3} TC "
+                                    "invalide(s), {4} TC corrigé(s) automatiquement.\n",
+                                    n_ok, n_dup, n_missing, n_bad, n_fixed), "accent")
         self.btn_apply.config(state="normal" if n_ok > 0 else "disabled")
 
     # ---------------------------------------------------------------- Apply
@@ -429,14 +410,15 @@ class CsvToTcWindow(PMWindow):
         if not self.plan:
             return
         if not messagebox.askyesno(
-            "Confirmer",
-            f"Appliquer le nouveau Start TC sur {len(self.plan)} clip(s) ?\n"
-            "Cette action passe par l'historique d'annulation de Resolve (undo standard)."
+            tr("Confirmer"),
+            tr("Appliquer le nouveau Start TC sur {0} clip(s) ?\n"
+               "Cette action passe par l'historique d'annulation de Resolve (undo standard).",
+               len(self.plan))
         ):
             return
 
         n_success, n_fail = 0, 0
-        self.log_write(self.log, "\n── Application ──\n", "accent")
+        self.log_write(self.log, tr("\n── Application ──\n"), "accent")
 
         for item in self.plan:
             clip = item["clip"]
@@ -446,10 +428,10 @@ class CsvToTcWindow(PMWindow):
             try:
                 clip.SetClipProperty("Start TC", new_tc)
             except Exception as e:
-                self.log_write(self.log, f"[ÉCHEC] '{name}' — exception à l'écriture : {e}\n", "err")
+                self.log_write(self.log, tr("[ÉCHEC] '{0}' — exception à l'écriture : {1}\n", name, e), "err")
                 pm_common.write_error_log(TOOL_NAME, e)
                 n_fail += 1
-                self._mark_row(name, "fail", f"Échec (exception : {e})")
+                self._mark_row(name, "fail", tr("Échec (exception : {0})", e))
                 continue
 
             try:
@@ -458,18 +440,20 @@ class CsvToTcWindow(PMWindow):
                 confirmed_tc = ""
 
             if confirmed_tc.strip() == new_tc.strip():
-                self.log_write(self.log, f"[OK] '{name}' — Start TC mis à jour : {item['old_tc']} → {confirmed_tc}\n", "ok")
+                self.log_write(self.log, tr("[OK] '{0}' — Start TC mis à jour : {1} → {2}\n",
+                                            name, item['old_tc'], confirmed_tc), "ok")
                 n_success += 1
-                self._mark_row(name, "ok", f"Appliqué ({confirmed_tc})")
+                self._mark_row(name, "ok", tr("Appliqué ({0})", confirmed_tc))
             else:
-                self.log_write(self.log, f"[ÉCHEC] '{name}' — écriture non confirmée "
-                                f"(attendu '{new_tc}', lu '{confirmed_tc}'). "
-                                "Probable rejet Resolve (média avec TC embarqué).\n", "err")
+                self.log_write(self.log, tr("[ÉCHEC] '{0}' — écriture non confirmée (attendu '{1}', lu '{2}'). Probable rejet "
+                                            "Resolve (média avec TC embarqué).\n",
+                                            name, new_tc, confirmed_tc), "err")
                 n_fail += 1
-                self._mark_row(name, "fail", f"Rejeté par Resolve (lu : {confirmed_tc or 'vide'})")
+                self._mark_row(name, "fail", tr("Rejeté par Resolve (lu : {0})", confirmed_tc or tr("vide")))
 
-        self.log_write(self.log, f"\nTerminé : {n_success} succès, {n_fail} échec(s).\n", "accent")
-        messagebox.showinfo("Terminé", f"{n_success} clip(s) mis à jour avec succès.\n{n_fail} échec(s) — voir le log.")
+        self.log_write(self.log, tr("\nTerminé : {0} succès, {1} échec(s).\n", n_success, n_fail), "accent")
+        messagebox.showinfo(tr("Terminé"), tr("{0} clip(s) mis à jour avec succès.\n{1} échec(s) — voir le log.",
+                                          n_success, n_fail))
 
     def _mark_row(self, name, tag, status_text):
         for iid in self.tree.get_children():

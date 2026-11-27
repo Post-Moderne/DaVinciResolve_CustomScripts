@@ -52,6 +52,7 @@ for _d in _MODULE_DIRS:
         sys.path.insert(0, _d)
 import pm_common
 from pm_common import PMWindow, Theme
+from pm_tools.i18n import tr, choices, source
 from pm_tools.csv_to_vfxid import tc_to_frames
 
 TOOL_NAME = "PM-Resolve_Markers-to-Stills"
@@ -152,7 +153,7 @@ def build_name(pieces, sep, values):
         if part:
             parts.append(part)
         elif pid != "text":
-            empty.append(BRICKS[pid])
+            empty.append(tr(BRICKS[pid]))
     return sep.join(parts), empty
 
 
@@ -191,13 +192,13 @@ def build_plan(markers, start_frame, fps, drop_frame, color, folder, ext,
         used.add(fname.lower())
         notes = []
         if fallback:
-            notes.append("nom vide → TC")
+            notes.append(tr("nom vide → TC"))
         elif empty:
-            notes.append("brique vide : " + ", ".join(empty))
+            notes.append(tr("brique vide : ") + ", ".join(empty))
         if n > 1:
-            notes.append(f"doublon → _{n}")
+            notes.append(tr("doublon → _{0}", n))
         plan.append({"tc": tc, "color": m.get("color", ""), "label": label, "path": path,
-                     "status": "Prêt" + (f" ({' ; '.join(notes)})" if notes else ""),
+                     "status": tr("Prêt") + (f" ({' ; '.join(notes)})" if notes else ""),
                      "warn": bool(notes)})
     return plan
 
@@ -243,33 +244,33 @@ class MarkersToStillsWindow(PMWindow):
     def _build_content(self, main):
         top = tk.Frame(main, bg=Theme.DARK_BG)
         top.pack(fill="x")
-        self._label(top, "Dossier :").pack(side="left")
+        self._label(top, tr("Dossier :")).pack(side="left")
         self.folder_var = tk.StringVar()
         entry = tk.Entry(top, textvariable=self.folder_var, bg=Theme.PANEL_BG, fg=Theme.FG,
                           insertbackground=Theme.FG, relief="flat", width=50)
         entry.pack(side="left", padx=6, ipady=3)
         entry.bind("<Return>", lambda e: self._rebuild_plan())
-        self.button(top, "Parcourir…", Theme.PANEL_BG, self.on_browse, side="left")
-        self.btn_export = self.button(top, "Exporter", Theme.SUCCESS, self.on_export, side="right")
+        self.button(top, tr("Parcourir…"), Theme.PANEL_BG, self.on_browse, side="left")
+        self.btn_export = self.button(top, tr("Exporter"), Theme.SUCCESS, self.on_export, side="right")
         self.btn_export.config(state="disabled")
 
         opts = tk.Frame(main, bg=Theme.DARK_BG)
         opts.pack(fill="x", pady=(8, 0))
-        self._label(opts, "Couleur :").pack(side="left")
-        self.color_var = tk.StringVar(value=ALL_COLORS)
+        self._label(opts, tr("Couleur :")).pack(side="left")
+        self.color_var = tk.StringVar(value=tr(ALL_COLORS))
         self.cmb_color = ttk.Combobox(opts, textvariable=self.color_var, width=22,
-                                       state="readonly", values=[ALL_COLORS])
+                                       state="readonly", values=[tr(ALL_COLORS)])
         self.cmb_color.pack(side="left", padx=6)
         self.cmb_color.bind("<<ComboboxSelected>>", lambda e: self._rebuild_plan())
-        self._label(opts, "Format :").pack(side="left", padx=(16, 0))
+        self._label(opts, tr("Format :")).pack(side="left", padx=(16, 0))
         self.fmt_var = tk.StringVar(value=self._cfg.get("ext") if self._cfg.get("ext") in FORMATS else "png")
         cmb_fmt = ttk.Combobox(opts, textvariable=self.fmt_var, width=6, state="readonly", values=FORMATS)
         cmb_fmt.pack(side="left", padx=6)
         cmb_fmt.bind("<<ComboboxSelected>>", lambda e: self._on_naming_changed())
-        self.button(opts, "Relire les markers", Theme.PANEL_BG, self._reload, side="right")
+        self.button(opts, tr("Relire les markers"), Theme.PANEL_BG, self._reload, side="right")
 
         # ── Constructeur de nom ──
-        self.section(main, "NOM DU FICHIER  —  briques dans l'ordre d'assemblage")
+        self.section(main, tr("NOM DU FICHIER  —  briques dans l'ordre d'assemblage"))
         box = tk.Frame(main, bg=Theme.DARK_BG)
         box.pack(fill="x")
         self.lst = tk.Listbox(box, height=5, width=44, bg=Theme.PANEL_BG, fg=Theme.FG,
@@ -282,49 +283,49 @@ class MarkersToStillsWindow(PMWindow):
         side.pack(side="left", padx=(8, 0), fill="y")
         for txt, cmd in (("↑", lambda: self._move(-1)), ("↓", lambda: self._move(1)),
                          ("✕", self._remove)):
-            tk.Button(side, text=txt, width=3, font=Theme.FONT_SM, bg=Theme.PANEL_BG, fg=Theme.FG,
+            tk.Button(side, text=txt, width=3, font=Theme.FONT_SM, bg=Theme.PANEL_BG, fg=Theme.BUTTON_FG,
                       relief="flat", bd=0, pady=3, cursor="hand2", command=cmd).pack(pady=1)
 
         add = tk.Frame(box, bg=Theme.DARK_BG)
         add.pack(side="left", padx=(20, 0), anchor="n")
-        self._label(add, "Ajouter une brique :").grid(row=0, column=0, sticky="w")
-        self.add_var = tk.StringVar(value=BRICKS["marker_name"])
+        self._label(add, tr("Ajouter une brique :")).grid(row=0, column=0, sticky="w")
+        self.add_var = tk.StringVar(value=tr(BRICKS["marker_name"]))
         ttk.Combobox(add, textvariable=self.add_var, width=30, state="readonly",
-                     values=list(BRICKS.values())).grid(row=1, column=0, sticky="w", pady=(2, 0))
-        tk.Button(add, text="Ajouter", font=Theme.FONT_SM, bg=Theme.PANEL_BG, fg=Theme.FG,
+                     values=choices(BRICKS.values())).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        tk.Button(add, text=tr("Ajouter"), font=Theme.FONT_SM, bg=Theme.PANEL_BG, fg=Theme.BUTTON_FG,
                   relief="flat", bd=0, padx=10, pady=3, cursor="hand2",
                   command=self._add).grid(row=1, column=1, padx=(6, 0))
-        self._label(add, "Texte (pour « Texte libre ») :").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self._label(add, tr("Texte (pour « Texte libre ») :")).grid(row=2, column=0, sticky="w", pady=(8, 0))
         self.text_var = tk.StringVar()
         tk.Entry(add, textvariable=self.text_var, bg=Theme.PANEL_BG, fg=Theme.FG,
                  insertbackground=Theme.FG, relief="flat", width=32).grid(row=3, column=0, sticky="w", ipady=3)
 
         fmt = tk.Frame(main, bg=Theme.DARK_BG)
         fmt.pack(fill="x", pady=(8, 0))
-        self._label(fmt, "Séparateur :").pack(side="left")
+        self._label(fmt, tr("Séparateur :")).pack(side="left")
         sep_name = next((k for k, v in SEPARATORS.items() if v == self._cfg.get("sep", "_")),
                         list(SEPARATORS)[0])
-        self.sep_var = tk.StringVar(value=sep_name)
+        self.sep_var = tk.StringVar(value=tr(sep_name))
         cmb = ttk.Combobox(fmt, textvariable=self.sep_var, width=14, state="readonly",
-                           values=list(SEPARATORS))
+                           values=choices(SEPARATORS))
         cmb.pack(side="left", padx=6)
         cmb.bind("<<ComboboxSelected>>", lambda e: self._on_naming_changed())
-        self._label(fmt, "Format de date :").pack(side="left", padx=(16, 0))
+        self._label(fmt, tr("Format de date :")).pack(side="left", padx=(16, 0))
         date_name = self._cfg.get("date_fmt") if self._cfg.get("date_fmt") in DATE_FORMATS else "AAAA-MM-JJ"
-        self.date_var = tk.StringVar(value=date_name)
+        self.date_var = tk.StringVar(value=tr(date_name))
         cmb = ttk.Combobox(fmt, textvariable=self.date_var, width=12, state="readonly",
-                           values=list(DATE_FORMATS))
+                           values=choices(DATE_FORMATS))
         cmb.pack(side="left", padx=6)
         cmb.bind("<<ComboboxSelected>>", lambda e: self._on_naming_changed())
-        self._label(fmt, "Délai de rendu :").pack(side="left", padx=(16, 0))
+        self._label(fmt, tr("Délai de rendu :")).pack(side="left", padx=(16, 0))
         delay_name = self._cfg.get("render_delay") if self._cfg.get("render_delay") in RENDER_DELAYS else "0 s"
-        self.delay_var = tk.StringVar(value=delay_name)
+        self.delay_var = tk.StringVar(value=tr(delay_name))
         cmb = ttk.Combobox(fmt, textvariable=self.delay_var, width=6, state="readonly",
-                           values=list(RENDER_DELAYS))
+                           values=choices(RENDER_DELAYS))
         cmb.pack(side="left", padx=6)
         cmb.bind("<<ComboboxSelected>>", lambda e: self._save_cfg())
         self.skip_var = tk.BooleanVar(value=self._cfg.get("skip_no_media", True))
-        tk.Checkbutton(fmt, text="Ignorer les clips sans média (titres, adjustment…)",
+        tk.Checkbutton(fmt, text=tr("Ignorer les clips sans média (titres, adjustment…)"),
                        variable=self.skip_var, command=self._on_naming_changed,
                        bg=Theme.DARK_BG, fg=Theme.FG, activebackground=Theme.DARK_BG,
                        activeforeground=Theme.FG, selectcolor=Theme.PANEL_BG,
@@ -335,8 +336,8 @@ class MarkersToStillsWindow(PMWindow):
 
         columns = ("tc", "color", "file", "status")
         self.tree = ttk.Treeview(main, columns=columns, show="headings", height=9)
-        for col, title, w in (("tc", "TC", 110), ("color", "Couleur", 90),
-                              ("file", "Fichier", 380), ("status", "Statut", 240)):
+        for col, title, w in (("tc", "TC", 110), ("color", tr("Couleur"), 90),
+                              ("file", tr("Fichier"), 380), ("status", tr("Statut"), 240)):
             self.tree.heading(col, text=title)
             self.tree.column(col, width=w, anchor="w")
         self.tree.pack(fill="both", expand=True, pady=(6, 8))
@@ -352,8 +353,8 @@ class MarkersToStillsWindow(PMWindow):
     # ------------------------------------------------- Constructeur de nom
     def _piece_text(self, piece):
         if piece["id"] == "text":
-            return f"Texte libre : « {piece.get('text', '')} »"
-        return BRICKS[piece["id"]]
+            return tr("Texte libre : « {0} »", piece.get('text', ''))
+        return tr(BRICKS[piece["id"]])
 
     def _refresh_list(self, select=None):
         self.lst.delete(0, "end")
@@ -367,12 +368,13 @@ class MarkersToStillsWindow(PMWindow):
         return sel[0] if sel else None
 
     def _add(self):
-        pid = next((k for k, v in BRICKS.items() if v == self.add_var.get()), "marker_name")
+        label = source(self.add_var.get(), BRICKS.values())
+        pid = next((k for k, v in BRICKS.items() if v == label), "marker_name")
         piece = {"id": pid}
         if pid == "text":
             txt = self.text_var.get().strip()
             if not txt:
-                messagebox.showinfo("Texte libre", "Saisis d'abord le texte à ajouter.")
+                messagebox.showinfo(tr("Texte libre"), tr("Saisis d'abord le texte à ajouter."))
                 return
             piece["text"] = txt
         self.pieces.append(piece)
@@ -396,7 +398,17 @@ class MarkersToStillsWindow(PMWindow):
         self._on_naming_changed()
 
     def _sep(self):
-        return SEPARATORS.get(self.sep_var.get(), "_")
+        return SEPARATORS.get(source(self.sep_var.get(), SEPARATORS), "_")
+
+    # Les listes affichent des libellés traduits ; plan et config gardent les valeurs internes.
+    def _color(self):
+        return source(self.color_var.get(), (ALL_COLORS,))
+
+    def _date_fmt(self):
+        return source(self.date_var.get(), DATE_FORMATS)
+
+    def _delay(self):
+        return source(self.delay_var.get(), RENDER_DELAYS)
 
     def _on_naming_changed(self):
         self._resolved.clear()
@@ -404,18 +416,18 @@ class MarkersToStillsWindow(PMWindow):
         self._rebuild_plan()
 
     def _save_cfg(self):
-        save_config({"pieces": self.pieces, "sep": self._sep(), "date_fmt": self.date_var.get(),
-                     "ext": self.fmt_var.get(), "render_delay": self.delay_var.get(), "skip_no_media": bool(self.skip_var.get())})
+        save_config({"pieces": self.pieces, "sep": self._sep(), "date_fmt": self._date_fmt(),
+                     "ext": self.fmt_var.get(), "render_delay": self._delay(), "skip_no_media": bool(self.skip_var.get())})
 
     # ---------------------------------------------------------- Resolve init
     def _init_resolve(self):
         try:
             self.resolve, self.project, _ = pm_common.get_resolve_objects()
         except Exception as e:
-            messagebox.showerror("Erreur de connexion", str(e))
+            messagebox.showerror(tr("Erreur de connexion"), str(e))
             self.resolve = self.project = None
             return
-        self.log_write(self.log, f"Connecté à Resolve (variante : {pm_common.RESOLVE_VARIANT}).\n", "dim")
+        self.log_write(self.log, tr("Connecté à Resolve (variante : {0}).\n", pm_common.RESOLVE_VARIANT), "dim")
         self._reload()
 
     def _scan_items(self):
@@ -436,7 +448,7 @@ class MarkersToStillsWindow(PMWindow):
         """Relit la timeline active, ses markers, ses clips et les couleurs présentes."""
         self.timeline = self.project.GetCurrentTimeline() if self.project else None
         if not self.timeline:
-            self.log_write(self.log, "[ERREUR] Aucune timeline active.\n", "err")
+            self.log_write(self.log, tr("[ERREUR] Aucune timeline active.\n"), "err")
             return
         try:
             self.fps = float(self.timeline.GetSetting("timelineFrameRate") or 24)
@@ -449,14 +461,13 @@ class MarkersToStillsWindow(PMWindow):
         self._candidates = self._scan_items()
         self._resolved.clear()
         colors = sorted({m.get("color", "") for m in self.markers.values() if m.get("color")})
-        self.cmb_color.config(values=[ALL_COLORS] + colors)
+        self.cmb_color.config(values=[tr(ALL_COLORS)] + colors)
         if self.color_var.get() not in self.cmb_color["values"]:
-            self.color_var.set(ALL_COLORS)
-        self.lbl_info.config(text=f"{self.timeline.GetName()}  ·  {self.fps:g} fps"
-                              f"{' DF' if self.drop_frame else ''}  ·  {len(self.markers)} marker(s)")
-        self.log_write(self.log, f"Timeline : {self.timeline.GetName()}  ·  {len(self.markers)} marker(s)"
-                        f"  ·  {len(self._candidates)} clip(s) vidéo"
-                        f"  ·  couleurs : {', '.join(colors) or 'aucune'}\n", "dim")
+            self.color_var.set(tr(ALL_COLORS))
+        self.lbl_info.config(text=tr("{0}  ·  {1:g} fps{2}  ·  {3} marker(s)",
+                                     self.timeline.GetName(), self.fps, ' DF' if self.drop_frame else '', len(self.markers)))
+        self.log_write(self.log, tr("Timeline : {0}  ·  {1} marker(s)  ·  {2} clip(s) vidéo  ·  couleurs : {3}\n",
+                                    self.timeline.GetName(), len(self.markers), len(self._candidates), ', '.join(colors) or tr("aucune")), "dim")
         self._rebuild_plan()
 
     def _resolve_top_clip(self, frame):
@@ -509,7 +520,7 @@ class MarkersToStillsWindow(PMWindow):
 
     # ---------------------------------------------------------------- Plan
     def on_browse(self):
-        folder = pm_common.pick_folder("Dossier de destination des stills", parent=self)
+        folder = pm_common.pick_folder(tr("Dossier de destination des stills"), parent=self)
         if folder:
             self.folder_var.set(folder)
             self._rebuild_plan()
@@ -524,9 +535,9 @@ class MarkersToStillsWindow(PMWindow):
         if not self.timeline:
             return
         folder = self._folder()
-        date_str = datetime.now().strftime(DATE_FORMATS.get(self.date_var.get(), "%Y-%m-%d"))
+        date_str = datetime.now().strftime(DATE_FORMATS.get(self._date_fmt(), "%Y-%m-%d"))
         self.plan = build_plan(self.markers, self.start_frame, self.fps, self.drop_frame,
-                               self.color_var.get(), folder or ".", self.fmt_var.get(),
+                               self._color(), folder or ".", self.fmt_var.get(),
                                pieces=self.pieces, sep=self._sep(), date_str=date_str,
                                resolver=self._resolve_top_clip)
         for p in self.plan:
@@ -534,11 +545,12 @@ class MarkersToStillsWindow(PMWindow):
                              values=(p["tc"], p["color"], os.path.basename(p["path"]), p["status"]),
                              tags=("warn" if p["warn"] else "ok",))
         if not self.plan:
-            self.log_write(self.log, "Aucun marker pour ce filtre.\n", "warn")
+            self.log_write(self.log, tr("Aucun marker pour ce filtre.\n"), "warn")
         elif folder and os.path.isdir(folder):
             self.btn_export.config(state="normal")
         else:
-            self.log_write(self.log, f"{len(self.plan)} marker(s) — choisis un dossier de destination.\n", "dim")
+            self.log_write(self.log, tr("{0} marker(s) — choisis un dossier de destination.\n",
+                                        len(self.plan)), "dim")
 
     # -------------------------------------------------------------- Export
     def _goto(self, tc):
@@ -560,8 +572,8 @@ class MarkersToStillsWindow(PMWindow):
 
     def _export_one(self, p):
         if not self._goto(p["tc"]):
-            return False, "playhead non positionné"
-        self._wait(RENDER_DELAYS.get(self.delay_var.get(), 0.0))
+            return False, tr("playhead non positionné")
+        self._wait(RENDER_DELAYS.get(self._delay(), 0.0))
         for _ in range(3):
             ok = self.project.ExportCurrentFrameAsStill(p["path"])
             for _ in range(10):         # l'écriture peut finir après le retour de l'API
@@ -569,14 +581,15 @@ class MarkersToStillsWindow(PMWindow):
                     return True, ""
                 time.sleep(0.1)
             time.sleep(0.3)
-        return False, "export refusé par Resolve" if not ok else "fichier non créé"
+        return False, tr("export refusé par Resolve") if not ok else tr("fichier non créé")
 
     def on_export(self):
         folder = self._folder()
         if not self.plan or not os.path.isdir(folder):
-            messagebox.showerror("Dossier introuvable", f"Choisis un dossier existant :\n{folder}")
+            messagebox.showerror(tr("Dossier introuvable"), tr("Choisis un dossier existant :\n{0}", folder))
             return
-        if not messagebox.askyesno("Confirmer", f"Exporter {len(self.plan)} still(s) vers\n{folder} ?"):
+        if not messagebox.askyesno(tr("Confirmer"), tr("Exporter {0} still(s) vers\n{1} ?",
+                                                   len(self.plan), folder)):
             return
         self._save_cfg()
         self._rebuild_plan()            # nouveaux noms si des fichiers sont apparus entre-temps
@@ -585,23 +598,24 @@ class MarkersToStillsWindow(PMWindow):
         self.log_write(self.log, "\n── Export ──\n", "accent")
 
         original_tc = self.timeline.GetCurrentTimecode()
-        n_ok, journal = 0, [f"Timeline : {self.timeline.GetName()}", f"Dossier : {folder}"]
+        n_ok, journal = 0, [tr("Timeline : {0}", self.timeline.GetName()), tr("Dossier : {0}", folder)]
         for i, p in enumerate(self.plan, 1):
             try:
                 ok, why = self._export_one(p)
             except Exception as e:
-                ok, why = False, f"exception : {e}"
+                ok, why = False, tr("exception : {0}", e)
             iid = p["tc"]
             if ok:
                 n_ok += 1
                 self.log_write(self.log, f"[OK] {p['tc']}  → {os.path.basename(p['path'])}\n", "ok")
                 self.tree.item(iid, tags=("ok",))
-                self.tree.set(iid, "status", "Exporté")
+                self.tree.set(iid, "status", tr("Exporté"))
             else:
-                self.log_write(self.log, f"[ÉCHEC] {p['tc']}  {os.path.basename(p['path'])} — {why}\n", "err")
+                self.log_write(self.log, tr("[ÉCHEC] {0}  {1} — {2}\n",
+                                            p['tc'], os.path.basename(p['path']), why), "err")
                 self.tree.item(iid, tags=("bad",))
-                self.tree.set(iid, "status", f"Échec ({why})")
-            journal.append(f"{p['tc']}\t{p['color']}\t{p['path']}\t{'OK' if ok else 'ECHEC : ' + why}")
+                self.tree.set(iid, "status", tr("Échec ({0})", why))
+            journal.append(f"{p['tc']}\t{p['color']}\t{p['path']}\t{'OK' if ok else tr('ECHEC : ') + why}")
             self.progress.config(value=i)
             self.update()
 
@@ -609,12 +623,13 @@ class MarkersToStillsWindow(PMWindow):
             self.timeline.SetCurrentTimecode(original_tc)
         try:
             log_path = pm_common.write_log(TOOL_NAME, journal)
-            self.log_write(self.log, f"\nJournal : {log_path}\n", "dim")
+            self.log_write(self.log, tr("\nJournal : {0}\n", log_path), "dim")
         except OSError as e:
-            self.log_write(self.log, f"\n[INFO] Journal non écrit ({e}).\n", "dim")
+            self.log_write(self.log, tr("\n[INFO] Journal non écrit ({0}).\n", e), "dim")
         n_fail = len(self.plan) - n_ok
-        self.log_write(self.log, f"Terminé : {n_ok} succès, {n_fail} échec(s).\n", "accent")
-        messagebox.showinfo("Terminé", f"{n_ok} still(s) exporté(s).\n{n_fail} échec(s) — voir le log.")
+        self.log_write(self.log, tr("Terminé : {0} succès, {1} échec(s).\n", n_ok, n_fail), "accent")
+        messagebox.showinfo(tr("Terminé"), tr("{0} still(s) exporté(s).\n{1} échec(s) — voir le log.",
+                                          n_ok, n_fail))
         self.btn_export.config(state="normal")
 
 

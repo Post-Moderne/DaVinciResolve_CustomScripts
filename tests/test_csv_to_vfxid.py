@@ -62,6 +62,32 @@ class ErrorAndSampleTests(unittest.TestCase):
         self.assertEqual(v.tc_to_frames(rows[0][1], 24), (3600 + 5) * 24)
 
 
+class ManualColumnsTests(unittest.TestCase):
+    CSV = "Breakdown,,\nPlan,Entrée,Détail\nA,01:00:00:00,x\n,,\nB,01:00:01:00,\n"
+
+    def test_error_carries_headers_for_the_dialog(self):
+        with self.assertRaises(v.ColumnsNotFound) as cm:
+            v.read_csv_rows(write(self.CSV))
+        self.assertEqual((cm.exception.header_row, cm.exception.headers), (1, ["Plan", "Entrée", "Détail"]))
+        self.assertEqual(cm.exception.guess, (None, None, None))
+
+    def test_partial_guess(self):
+        with self.assertRaises(v.ColumnsNotFound) as cm:
+            v.read_csv_rows(write("Titre\nFoo,TC IN,Notes\nA,01:00:00:00,x\n"))
+        self.assertEqual((cm.exception.header_row, cm.exception.guess), (1, (None, 1, 2)))
+
+    def test_read_with_chosen_columns(self):
+        path = write(self.CSV)
+        self.assertEqual(v.read_csv_rows(path, columns=(1, 0, 1, 2)),
+                         [("A", "01:00:00:00", "x"), ("B", "01:00:01:00", "")])
+        self.assertEqual(v.read_csv_rows(path, columns=(1, 0, 1, None))[0], ("A", "01:00:00:00", ""))
+
+    def test_empty_file(self):
+        with self.assertRaises(v.ColumnsNotFound) as cm:
+            v.read_csv_rows(write(""))
+        self.assertEqual(cm.exception.headers, [])
+
+
 class MarkerFrameTests(unittest.TestCase):
     def test_relative_to_timeline_start(self):
         tl_start = 86400                        # 01:00:00:00 à 24 fps

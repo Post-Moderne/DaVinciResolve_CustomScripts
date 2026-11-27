@@ -18,6 +18,7 @@ import fnmatch
 import re
 from collections import OrderedDict, namedtuple
 
+from pm_tools.i18n import tr
 from pm_tools.snapdrive import is_mounted, normalize
 
 # kind : "source" (clip à chercher dans les SnapDrive), "generator" (titre, générateur,
@@ -185,33 +186,35 @@ def report_rows(report, mounted=is_mounted):
     for s in report.sources:
         tl = " | ".join(sorted(s.timelines))
         if not s.chosen:
-            rows.append(["INTROUVABLE", "", s.name, "", "", s.uses, s.usage or "", tl, ""])
+            rows.append([tr("INTROUVABLE"), "", s.name, "", "", s.uses, s.usage or "", tl, ""])
             continue
         c = s.chosen
-        detail = "disque monté" if mounted(c.disk) else "disque non monté"
-        rows.append(["TROUVÉ" + (" (doublon)" if s.duplicate else ""), c.disk, s.name, c.path,
+        detail = tr("disque monté") if mounted(c.disk) else tr("disque non monté")
+        rows.append([tr("TROUVÉ") + (tr(" (doublon)") if s.duplicate else ""), c.disk, s.name, c.path,
                      c.size if c.size is not None else "", s.uses, s.usage or "", tl, detail])
         for e in s.hits:
             if e is not c:
-                rows.append(["DOUBLON (alternative)", e.disk, s.name, e.path,
+                rows.append([tr("DOUBLON (alternative)"), e.disk, s.name, e.path,
                              e.size if e.size is not None else "", "", "", tl, ""])
     for it in report.ignored:
-        rows.append(["IGNORÉ", "", it.name, "", "", "", "", it.timeline,
-                     IGNORED_LABELS.get(it.kind, it.kind) + (f" [{it.detail}]" if it.detail else "")])
+        rows.append([tr("IGNORÉ"), "", it.name, "", "", "", "", it.timeline,
+                     tr(IGNORED_LABELS.get(it.kind, it.kind)) + (f" [{it.detail}]" if it.detail else "")])
     return rows
 
 
 def write_csv(report, path, mounted=is_mounted):
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(CSV_HEADER)
+        w.writerow([tr(h) for h in CSV_HEADER])
         w.writerows(report_rows(report, mounted))
 
 
 def human_size(n):
     n = float(n or 0)
-    for unit in ("o", "Ko", "Mo", "Go", "To"):
-        if n < 1024:
-            return f"{n:.1f} {unit}" if unit != "o" else f"{int(n)} o"
+    if n < 1024:
+        return tr("{0} o", int(n))
+    for unit in ("Ko", "Mo", "Go", "To"):
         n /= 1024
-    return f"{n:.1f} Po"
+        if n < 1024:
+            return f"{n:.1f} {tr(unit)}"
+    return tr("{0:.1f} Po", n / 1024)

@@ -18,6 +18,7 @@ import os
 import unicodedata
 from collections import OrderedDict, namedtuple
 
+from pm_tools.i18n import tr
 from pm_tools.snapdrive import is_mounted
 from pm_tools.snapdrive_analysis import choose_entry
 
@@ -91,11 +92,11 @@ def run_import(media_pool, plan, existing=None, file_exists=os.path.isfile, prog
                 path = entry.path
                 key = norm_path(path)
                 if entry.type == "sequence":
-                    r = Result(disk, source.name, path, "skipped", "séquence d'images : non gérée en v1")
+                    r = Result(disk, source.name, path, "skipped", tr("séquence d'images : non gérée en v1"))
                 elif key in existing:
-                    r = Result(disk, source.name, path, "present", "déjà dans le projet")
+                    r = Result(disk, source.name, path, "present", tr("déjà dans le projet"))
                 elif not file_exists(path):
-                    r = Result(disk, source.name, path, "absent", "présent dans le SnapDrive mais absent du disque")
+                    r = Result(disk, source.name, path, "absent", tr("présent dans le SnapDrive mais absent du disque"))
                 else:
                     r, target = _import_one(media_pool, root, disk, target, source, path)
                     if r.status == "imported":
@@ -117,13 +118,13 @@ def _import_one(media_pool, root, disk, target, source, path):
             target = ensure_bin(media_pool, top, disk) if top else None
             if target is None:
                 return Result(disk, source.name, path, "error",
-                              f"impossible de créer le bin {ROOT_BIN}/{disk}"), None
+                              tr("impossible de créer le bin {0}/{1}", ROOT_BIN, disk)), None
         media_pool.SetCurrentFolder(target)
         items = media_pool.ImportMedia([path])
     except Exception as e:                     # l'API Resolve peut lever : on garde un message de tech
-        return Result(disk, source.name, path, "error", f"exception Resolve : {e}"), target
+        return Result(disk, source.name, path, "error", tr("exception Resolve : {0}", e)), target
     if not items:
-        return Result(disk, source.name, path, "error", "Resolve a refusé l'import (format non reconnu ?)"), target
+        return Result(disk, source.name, path, "error", tr("Resolve a refusé l'import (format non reconnu ?)")), target
     return Result(disk, source.name, path, "imported", ""), target
 
 
@@ -132,9 +133,9 @@ def summarize(results):
     c = {k: 0 for k in ("imported", "present", "absent", "error", "skipped")}
     for r in results:
         c[r.status] += 1
-    text = f"{c['imported']} importé(s), {c['present']} déjà présent(s), {c['error']} en erreur"
+    text = tr("{0} importé(s), {1} déjà présent(s), {2} en erreur", c['imported'], c['present'], c['error'])
     if c["absent"]:
-        text += f", {c['absent']} absent(s) du disque"
+        text += tr(", {0} absent(s) du disque", c['absent'])
     if c["skipped"]:
-        text += f", {c['skipped']} séquence(s) non gérée(s)"
+        text += tr(", {0} séquence(s) non gérée(s)", c['skipped'])
     return c, text

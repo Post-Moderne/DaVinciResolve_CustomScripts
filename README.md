@@ -10,11 +10,19 @@ PM Suite — outils utilitaires internes pour DaVinci Resolve, regroupés dans u
 |---|---|
 | Find & Replace | Recherche/remplacement de texte, en deux onglets : métadonnées des clips du Media Pool, ou noms des clips de la timeline active (choix des pistes, prévisualisation, journal des anciens noms). |
 | CSV → Start TC | Met à jour le Start TC des clips à partir d'un `.csv` (colonnes `Name`/`Start`), avec relecture de confirmation après écriture. |
-| CSV → VFX ID | À partir d'un `.csv` (colonnes VFX ID + TC record, Notes facultatif), au choix : renomme les clips de la timeline avec les VFX ID (TC record comparé au point d'entrée des clips, piste au choix) et/ou pose des markers timeline (au début, au milieu ou à la fin du clip renommé). Sans renommage, les markers sont placés au TC du CSV, même sans clip en dessous. Aperçu avant application et journal. |
+| CSV → VFX ID | À partir d'un `.csv` (colonnes VFX ID + TC record, Notes facultatif), au choix : renomme les clips de la timeline avec les VFX ID (TC record comparé au point d'entrée des clips, piste au choix) et/ou pose des markers timeline (au début, au milieu ou à la fin du clip renommé). Sans renommage, les markers sont placés au TC du CSV, même sans clip en dessous. Aperçu avant application et journal. Si les colonnes ne sont pas reconnues, un dialogue permet de les associer à la main (comme pour CSV → Start TC). |
 | Markers → Stills | Exporte un still (PNG, JPG, TIFF ou DPX) à chaque marker de la timeline active, avec filtre par couleur de marker ou toutes les couleurs. Le nom du fichier se construit avec des **briques ordonnables** (↑ ↓ ✕) : nom/notes du marker, nom ou fichier source du clip du dessus, TC record, TC source, date, numéro séquentiel, texte libre, avec séparateur au choix. Aperçu des noms avant export, doublons suffixés (`_2`, `_3`…) sans jamais écraser, délai de rendu optionnel (0 à 3 s) pour les frames lourdes (Fusion, gros étalonnage), configuration mémorisée, journal d'export. |
 | Timecode Extractor | Extrait l'heure de tournage depuis le nom de fichier (ex: DJI, autres presets caméra) et l'écrit dans le Start TC. |
 | BinBuilder | Crée plusieurs bins/sous-bins d'un coup dans le Media Pool — soit en miroir d'une arborescence de dossiers Finder, soit à partir d'une liste indentée saisie à la main. |
 | SnapDrive Loader | Analyse les timelines (clips offline d'un import XML/AAF) et les croise avec les SnapDrive (`.html`, scans de disques) : pull list par disque, introuvables, doublons, éléments ignorés, export CSV. « Importer les disques montés » importe les sources des disques branchés dans `_SnapDrive/<DISQUE>` (sans réimporter ce qui est déjà dans le projet). L'analyse est en lecture seule ; les timelines ne sont jamais modifiées. |
+
+### Langue / Language
+
+L'interface est en **français** (par défaut) ou en **anglais** : sélecteur « Français / English » en haut du lanceur. Le choix est mémorisé sur chaque poste (`~/Logs/PM-Suite/config/language.json`). Les outils déjà ouverts prennent la nouvelle langue à leur réouverture. L'installeur et les traces de diagnostic restent en français.
+
+*The interface is available in French (default) and English: use the “Français / English” switch at the top of the launcher.*
+
+Pour ajouter un texte : l'écrire en français dans `tr(...)` et ajouter sa traduction dans `scripts/pm_tools/i18n_en.py` (voir `pm_tools/i18n.py` ; les tests signalent les oublis).
 
 ### BETA
 
@@ -76,6 +84,8 @@ scripts/
   VERSION                 # source de vérité pour la version installée
   pm_tools/
     __init__.py
+    i18n.py                 # choix de la langue et tr()
+    i18n_en.py              # traductions anglaises
     find_replace.py       # Find & Replace (onglets Métadonnées + Timeline)
     csv_to_tc.py           # CSV → Start TC
     dji_tc.py               # Timecode Extractor

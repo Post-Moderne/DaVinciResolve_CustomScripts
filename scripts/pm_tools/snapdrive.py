@@ -26,6 +26,8 @@ import os
 import re
 from collections import defaultdict, namedtuple
 
+from pm_tools.i18n import tr
+
 # Un appel D.p(...) : tableau JSON suivi de « ); » puis fin de ligne, autre D.p( ou </script>.
 # Le lookahead évite de s'arrêter sur un « ]); » qui apparaîtrait dans un nom de fichier.
 _DP_RE = re.compile(r'D\.p\((\[.*?\])\);(?=\s*(?:D\.p\(|$|</script>))', re.M)
@@ -134,11 +136,11 @@ def parse_snapdrive_file(path):
         with open(path, encoding="utf-8", errors="replace") as f:
             text = f.read()
     except OSError as e:
-        raise SnapDriveError(f"Lecture impossible : {os.path.basename(path)} ({e.strerror or e})")
+        raise SnapDriveError(tr("Lecture impossible : {0} ({1})", os.path.basename(path), e.strerror or e))
     drive = parse_snapdrive_text(text, source=path)
     if not drive.entries:
-        raise SnapDriveError(f"Aucune donnée SnapDrive reconnue dans {os.path.basename(path)} "
-                             f"(appels D.p introuvables ou vides).")
+        raise SnapDriveError(tr("Aucune donnée SnapDrive reconnue dans {0} (appels D.p introuvables ou vides).",
+                                os.path.basename(path)))
     return drive
 
 
@@ -182,7 +184,7 @@ def load_folder(folder):
     try:
         names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".html", ".htm")))
     except OSError as e:
-        raise SnapDriveError(f"Dossier illisible : {folder} ({e.strerror or e})")
+        raise SnapDriveError(tr("Dossier illisible : {0} ({1})", folder, e.strerror or e))
     for n in names:
         try:
             index.add(parse_snapdrive_file(os.path.join(folder, n)))

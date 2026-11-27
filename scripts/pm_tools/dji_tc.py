@@ -17,6 +17,7 @@ from tkinter import ttk, messagebox
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pm_common
 from pm_common import PMWindow, Theme
+from pm_tools.i18n import tr, choices, source
 
 TOOL_NAME = "PM-DJI-TC"
 
@@ -43,22 +44,22 @@ def generate_strict_pattern(filename, tc_portion):
     tc = tc_portion.strip()
 
     if not tc:
-        raise ValueError("La portion HHMMSS est vide.")
+        raise ValueError(tr("La portion HHMMSS est vide."))
     if not re.fullmatch(r"\d{6}", tc):
-        raise ValueError(f"La portion HHMMSS doit faire exactement 6 chiffres, trouvé : {tc!r}")
+        raise ValueError(tr("La portion HHMMSS doit faire exactement 6 chiffres, trouvé : {0!r}", tc))
     if tc not in stem:
-        raise ValueError(f"{tc!r} introuvable dans {stem!r}")
+        raise ValueError(tr("{0!r} introuvable dans {1!r}", tc, stem))
 
     hh, mm, ss = int(tc[0:2]), int(tc[2:4]), int(tc[4:6])
     if not (0 <= hh <= 23 and 0 <= mm <= 59 and 0 <= ss <= 59):
-        raise ValueError(f"Valeurs TC invalides : {hh:02d}h{mm:02d}m{ss:02d}s")
+        raise ValueError(tr("Valeurs TC invalides : {0:02d}h{1:02d}m{2:02d}s", hh, mm, ss))
 
     placeholder = "\x00TC\x00"
     marked = stem.replace(tc, placeholder, 1)
 
     parts = marked.split(placeholder)
     if len(parts) != 2:
-        raise ValueError("La portion HHMMSS apparaît plusieurs fois dans le nom — ambiguïté.")
+        raise ValueError(tr("La portion HHMMSS apparaît plusieurs fois dans le nom — ambiguïté."))
 
     def segment_to_regex(seg):
         result = ""
@@ -83,26 +84,26 @@ def extract_tc_from_filename(filename, pattern):
     try:
         m = re.search(pattern, stem)
     except re.error as e:
-        raise ValueError(f"Regex invalide : {e}")
+        raise ValueError(tr("Regex invalide : {0}", e))
 
     if not m:
-        raise ValueError(f"Pattern non trouvé dans : {stem!r}")
+        raise ValueError(tr("Pattern non trouvé dans : {0!r}", stem))
 
     gd = m.groupdict()
 
     if "tc" in gd and gd["tc"]:
         raw = gd["tc"]
         if len(raw) != 6:
-            raise ValueError(f"Groupe 'tc' doit faire 6 chiffres, trouvé : {raw!r}")
+            raise ValueError(tr("Groupe 'tc' doit faire 6 chiffres, trouvé : {0!r}", raw))
         hh, mm, ss = raw[0:2], raw[2:4], raw[4:6]
     elif "hh" in gd and "mm" in gd and "ss" in gd:
         hh, mm, ss = gd["hh"], gd["mm"], gd["ss"]
     else:
-        raise ValueError("Le pattern doit contenir (?P<tc>HHMMSS) ou (?P<hh>HH)(?P<mm>MM)(?P<ss>SS)")
+        raise ValueError(tr("Le pattern doit contenir (?P<tc>HHMMSS) ou (?P<hh>HH)(?P<mm>MM)(?P<ss>SS)"))
 
-    if not (0 <= int(hh) <= 23): raise ValueError(f"Heure invalide : {hh}")
-    if not (0 <= int(mm) <= 59): raise ValueError(f"Minutes invalides : {mm}")
-    if not (0 <= int(ss) <= 59): raise ValueError(f"Secondes invalides : {ss}")
+    if not (0 <= int(hh) <= 23): raise ValueError(tr("Heure invalide : {0}", hh))
+    if not (0 <= int(mm) <= 59): raise ValueError(tr("Minutes invalides : {0}", mm))
+    if not (0 <= int(ss) <= 59): raise ValueError(tr("Secondes invalides : {0}", ss))
 
     return hh, mm, ss
 
@@ -116,7 +117,7 @@ def run_tc_extraction(pattern, dry_run=False):
 
     clips = media_pool.GetSelectedClips()
     if not clips:
-        raise RuntimeError("Aucun clip sélectionné.\nSélectionne au moins un clip dans la bin.")
+        raise RuntimeError(tr("Aucun clip sélectionné.\nSélectionne au moins un clip dans la bin."))
 
     resultats, ignores = [], []
     for clip in clips:
@@ -138,36 +139,36 @@ class DjiTcWindow(PMWindow):
         super().__init__(master, "Timecode Extractor", "DaVinci Resolve  ·  Media Pool")
 
     def _build_content(self, main):
-        self.section(main, "CAMÉRA / FORMAT")
-        self.preset_var = tk.StringVar(value=PRESETS[0]["label"])
+        self.section(main, tr("CAMÉRA / FORMAT"))
+        self.preset_var = tk.StringVar(value=tr(PRESETS[0]["label"]))
         combo = ttk.Combobox(main, textvariable=self.preset_var,
-                             values=[p["label"] for p in PRESETS],
+                             values=choices(p["label"] for p in PRESETS),
                              state="readonly", width=40, font=Theme.FONT_UI)
         combo.pack(anchor="w", pady=(4, 0))
         combo.bind("<<ComboboxSelected>>", self._on_preset_change)
 
-        self.example_var = tk.StringVar(value=f"ex: {PRESETS[0]['example']}")
+        self.example_var = tk.StringVar(value=tr("ex: {0}", PRESETS[0]['example']))
         self.example_lbl = tk.Label(main, textvariable=self.example_var,
                                      font=Theme.FONT_SM, bg=Theme.DARK_BG, fg=Theme.FG_DIM)
         self.example_lbl.pack(anchor="w", pady=(4, 0))
 
         self.custom_frame = tk.Frame(main, bg=Theme.DARK_BG)
 
-        self.section(self.custom_frame, "ÉTAPE 1 — Nom de fichier exemple")
-        tk.Label(self.custom_frame, text="Colle le nom d'un fichier représentatif (avec ou sans extension)",
+        self.section(self.custom_frame, tr("ÉTAPE 1 — Nom de fichier exemple"))
+        tk.Label(self.custom_frame, text=tr("Colle le nom d'un fichier représentatif (avec ou sans extension)"),
                  font=Theme.FONT_SM, bg=Theme.DARK_BG, fg=Theme.FG_DIM).pack(anchor="w", pady=(0, 4))
         self.filename_var = tk.StringVar()
         self.filename_var.trace_add("write", self._on_fields_change)
         self.entry(self.custom_frame, self.filename_var)
 
-        self.section(self.custom_frame, "ÉTAPE 2 — Portion HHMMSS")
-        tk.Label(self.custom_frame, text="Copie uniquement les 6 chiffres qui représentent l'heure (ex: 093439)",
+        self.section(self.custom_frame, tr("ÉTAPE 2 — Portion HHMMSS"))
+        tk.Label(self.custom_frame, text=tr("Copie uniquement les 6 chiffres qui représentent l'heure (ex: 093439)"),
                  font=Theme.FONT_SM, bg=Theme.DARK_BG, fg=Theme.FG_DIM).pack(anchor="w", pady=(0, 4))
         self.tc_portion_var = tk.StringVar()
         self.tc_portion_var.trace_add("write", self._on_fields_change)
         self.entry(self.custom_frame, self.tc_portion_var)
 
-        self.section(self.custom_frame, "ÉTAPE 3 — Regex généré")
+        self.section(self.custom_frame, tr("ÉTAPE 3 — Regex généré"))
         self.generated_pattern_var = tk.StringVar(value="—")
         self.pattern_status_var = tk.StringVar(value="")
 
@@ -182,47 +183,41 @@ class DjiTcWindow(PMWindow):
                                             font=Theme.FONT_SM, bg=Theme.DARK_BG, fg=Theme.SUCCESS, anchor="w")
         self.pattern_status_lbl.pack(anchor="w", pady=(4, 0))
 
-        self.section(main, "APERÇU")
+        self.preview_title = self.section(main, tr("APERÇU"))
         preview_frame = tk.Frame(main, bg=Theme.PANEL_BG,
                                   highlightbackground=Theme.BORDER, highlightthickness=1)
         preview_frame.pack(fill="x", pady=(4, 0))
-        self.preview_var = tk.StringVar(value="Lance une prévisualisation pour voir le résultat.")
+        self.preview_var = tk.StringVar(value=tr("Lance une prévisualisation pour voir le résultat."))
         tk.Label(preview_frame, textvariable=self.preview_var, font=Theme.FONT_MONO,
                  bg=Theme.PANEL_BG, fg=Theme.FG_DIM, anchor="w", padx=10, pady=8).pack(fill="x")
 
         btn_row = tk.Frame(main, bg=Theme.DARK_BG)
         btn_row.pack(fill="x", pady=(16, 0))
-        self.button(btn_row, "PRÉVISUALISER", Theme.ACCENT, self._preview, side="left")
-        self.button(btn_row, "APPLIQUER", Theme.SUCCESS, self._apply, side="left", padx_l=10)
-        self.button(btn_row, "EFFACER LOG", Theme.FG_DIM, self._clear, side="right")
+        self.button(btn_row, tr("PRÉVISUALISER"), Theme.ACCENT, self._preview, side="left")
+        self.button(btn_row, tr("APPLIQUER"), Theme.SUCCESS, self._apply, side="left", padx_l=10)
+        self.button(btn_row, tr("EFFACER LOG"), Theme.FG_DIM, self._clear, side="right")
 
         self.log = self.build_log(main, height=10)
-        self.log_write(self.log, "Prêt. Sélectionne des clips dans la bin puis clique sur Prévisualiser.\n", "dim")
+        self.log_write(self.log, tr("Prêt. Sélectionne des clips dans la bin puis clique sur Prévisualiser.\n"), "dim")
 
     # ── Helpers ─────────────────────────────────────────────────────────────
     def _clear(self):
         self.log_clear(self.log)
-        self.log_write(self.log, "Log effacé.\n", "dim")
+        self.log_write(self.log, tr("Log effacé.\n"), "dim")
 
     def _on_preset_change(self, event=None):
         label = self.preset_var.get()
-        preset = next((p for p in PRESETS if p["label"] == label), None)
+        preset = next((p for p in PRESETS if p["label"] == source(label, [p["label"]])), None)
         if not preset:
             return
         is_custom = preset["pattern"] == ""
         if is_custom:
-            self.custom_frame.pack(fill="x", before=self._get_apercu_frame())
+            self.custom_frame.pack(fill="x", before=self.preview_title)
             self.example_lbl.pack_forget()
         else:
             self.custom_frame.pack_forget()
             self.example_lbl.pack(anchor="w", pady=(4, 0))
-            self.example_var.set(f"ex: {preset['example']}" if preset["example"] else "")
-
-    def _get_apercu_frame(self):
-        for child in self.main.winfo_children():
-            if isinstance(child, tk.Label) and "APERÇU" in (child.cget("text") or ""):
-                return child
-        return None
+            self.example_var.set(tr("ex: {0}", preset['example']) if preset["example"] else "")
 
     def _on_fields_change(self, *args):
         filename = self.filename_var.get().strip()
@@ -238,7 +233,7 @@ class DjiTcWindow(PMWindow):
             self.generated_pattern_var.set(pattern)
             hh, mm, ss = extract_tc_from_filename(filename, pattern)
             tc_result = format_tc(hh, mm, ss)
-            self.pattern_status_var.set(f"✓  Test sur l'exemple  →  {tc_result}")
+            self.pattern_status_var.set(tr("✓  Test sur l'exemple  →  {0}", tc_result))
             self.pattern_status_lbl.config(fg=Theme.SUCCESS)
         except ValueError as e:
             self.generated_pattern_var.set("—")
@@ -247,12 +242,12 @@ class DjiTcWindow(PMWindow):
 
     def _get_pattern(self):
         label = self.preset_var.get()
-        preset = next((p for p in PRESETS if p["label"] == label), None)
+        preset = next((p for p in PRESETS if p["label"] == source(label, [p["label"]])), None)
         if preset and preset["pattern"]:
             return preset["pattern"]
         pattern = self.generated_pattern_var.get().strip()
         if not pattern or pattern == "—":
-            raise ValueError("Aucun pattern généré.\nRemplis le nom de fichier exemple et la portion HHMMSS.")
+            raise ValueError(tr("Aucun pattern généré.\nRemplis le nom de fichier exemple et la portion HHMMSS."))
         return pattern
 
     # ── Actions ────────────────────────────────────────────────────────────
@@ -260,7 +255,7 @@ class DjiTcWindow(PMWindow):
         try:
             pattern = self._get_pattern()
         except ValueError as e:
-            messagebox.showerror("Erreur", str(e))
+            messagebox.showerror(tr("Erreur"), str(e))
             return
 
         mode = "DRY RUN" if dry_run else "APPLY"
@@ -272,7 +267,7 @@ class DjiTcWindow(PMWindow):
         try:
             resultats, ignores = run_tc_extraction(pattern, dry_run=dry_run)
         except Exception as e:
-            self.log_write(self.log, f"ERREUR : {e}\n", "err")
+            self.log_write(self.log, tr("ERREUR : {0}\n", e), "err")
             pm_common.write_error_log(TOOL_NAME, e)
             return
 
@@ -282,7 +277,7 @@ class DjiTcWindow(PMWindow):
             self.log_write(self.log, f"{tc}\n", "ok")
 
         if ignores:
-            self.log_write(self.log, f"\n  — {len(ignores)} clip(s) ignoré(s) —\n", "dim")
+            self.log_write(self.log, tr("\n  — {0} clip(s) ignoré(s) —\n", len(ignores)), "dim")
             for name, raison in ignores:
                 self.log_write(self.log, f"  {name}\n", "warn")
                 self.log_write(self.log, f"    {raison}\n", "dim")
@@ -292,16 +287,17 @@ class DjiTcWindow(PMWindow):
             if resultats:
                 sample = resultats[0][1]
                 self.preview_var.set(f"{n} clip(s) → Start TC : {sample}" + (" …" if n > 1 else ""))
-            self.log_write(self.log, f"\n{n} clip(s) seraient modifiés. Clique sur APPLIQUER pour confirmer.\n", "accent")
+            self.log_write(self.log, tr("\n{0} clip(s) seraient modifiés. Clique sur APPLIQUER pour confirmer.\n",
+                                        n), "accent")
         else:
-            self.log_write(self.log, f"\n✓ {n} clip(s) modifié(s) avec succès.\n", "ok")
+            self.log_write(self.log, tr("\n✓ {0} clip(s) modifié(s) avec succès.\n", n), "ok")
 
     def _preview(self):
         self._run(dry_run=True)
 
     def _apply(self):
-        if messagebox.askyesno("Confirmer", "Écrire le Start TC sur les clips sélectionnés ?\n"
-                                "Cette action modifie les métadonnées dans la bin."):
+        if messagebox.askyesno(tr("Confirmer"), tr("Écrire le Start TC sur les clips sélectionnés ?\n"
+                                               "Cette action modifie les métadonnées dans la bin.")):
             self._run(dry_run=False)
 
 
